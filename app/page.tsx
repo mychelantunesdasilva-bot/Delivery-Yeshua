@@ -263,6 +263,11 @@ const [pagamento, setPagamento] = useState("Pix");
 const [numeroPedido, setNumeroPedido] = useState("");
 const [observacao, setObservacao] = useState("");
 
+const agora = new Date();
+const hora = agora.getHours();
+
+const lojaAberta = hora >= 19 || hora < 1;
+
   function adicionarAoCarrinho(nome: string, preco: number) {
     const produtoExistente = carrinho.find(
       (produto) => produto.nome === nome
@@ -400,6 +405,36 @@ setPagamento("Pix");
   <p className="mt-2 text-lg font-medium">
     Seu lanche favorito, do nosso jeito, direto até você.
   </p>
+</div>
+
+<div
+  className={`mt-4 rounded-2xl border p-4 ${
+    lojaAberta
+      ? "border-green-500/30 bg-green-500/10"
+      : "border-red-500/30 bg-red-500/10"
+  }`}
+>
+  <div className="flex items-center gap-3">
+    <span
+      className={`h-3 w-3 rounded-full ${
+        lojaAberta ? "bg-green-500" : "bg-red-500"
+      }`}
+    />
+
+    <div>
+      <p
+        className={`font-bold ${
+          lojaAberta ? "text-green-400" : "text-red-400"
+        }`}
+      >
+        {lojaAberta ? "Aberto agora" : "Fechado agora"}
+      </p>
+
+      <p className="text-sm text-zinc-400">
+        Todos os dias • 19:00 às 01:00
+      </p>
+    </div>
+  </div>
 </div>
 
         <p className="mt-2 text-lg text-zinc-600">
