@@ -261,6 +261,7 @@ const [telefone, setTelefone] = useState("");
 const [endereco, setEndereco] = useState("");
 const [pagamento, setPagamento] = useState("Pix");
 const [numeroPedido, setNumeroPedido] = useState("");
+const [observacao, setObservacao] = useState("");
 
   function adicionarAoCarrinho(nome: string, preco: number) {
     const produtoExistente = carrinho.find(
@@ -358,6 +359,8 @@ Pagamento: ${pagamento}
 Itens:
 ${itens}
 
+Observações: ${observacao.trim() || "Nenhuma"}
+
 Total: R$ ${valorTotal.toFixed(2).replace(".", ",")}
 `;
 
@@ -375,6 +378,7 @@ setPedidoConfirmado(false);
 setNome("");
 setTelefone("");
 setEndereco("");
+setObservacao("");
 setPagamento("Pix");
 
 }
@@ -656,6 +660,20 @@ setPagamento("Pix");
   className="w-full rounded-xl border border-zinc-300 px-4 py-3 outline-none"
 />
   </div>
+
+  <div>
+  <label className="mb-1 block font-medium">
+    Observações do pedido
+  </label>
+
+  <textarea
+    placeholder="Ex: sem tomate, sem cebola..."
+    value={observacao}
+    onChange={(event) => setObservacao(event.target.value)}
+    maxLength={300}
+    className="min-h-24 w-full resize-none rounded-xl border border-zinc-300 px-4 py-3 outline-none"
+  />
+</div>
 
   <div>
     <label className="mb-1 block font-medium">
