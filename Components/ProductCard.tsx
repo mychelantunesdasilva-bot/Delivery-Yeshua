@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 
 type ProductCardProps = {
   nome: string;
-  descricao: string;
   preco: string;
   imagem: string;
   esgotado?: boolean;
@@ -14,7 +13,6 @@ type ProductCardProps = {
 
 export default function ProductCard({
   nome,
-  descricao,
   preco,
   imagem,
   esgotado = false,
@@ -48,7 +46,6 @@ export default function ProductCard({
               </span>
             )}
           </div>
-          <p className="mt-1 line-clamp-2 text-sm leading-5 text-zinc-500">{descricao}</p>
           <div className="mt-auto flex items-end justify-between gap-3 pt-4">
             <p className="text-lg font-extrabold text-zinc-900">R$ {preco}</p>
             <span className={`flex h-10 min-w-10 items-center justify-center rounded-full border px-3 text-xl font-black ${
