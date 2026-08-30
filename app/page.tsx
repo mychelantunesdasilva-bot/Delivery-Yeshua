@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import Header from "@/Components/Header";
@@ -20,6 +20,8 @@ type ProdutoCardapio = {
   categoria: string;
   imagem: string;
   ativo: boolean;
+  destaque?: boolean;
+  ordem?: number;
 };
 
 export default function Home() {
@@ -39,31 +41,71 @@ export default function Home() {
   const [bairro, setBairro] = useState("");
   const [taxaEntrega, setTaxaEntrega] = useState(0);
   const [lojaAberta, setLojaAberta] = useState(false);
+  const [carregandoProdutos, setCarregandoProdutos] = useState(true);
+  const [erroProdutos, setErroProdutos] = useState("");
+  const [tipoEntrega, setTipoEntrega] = useState<"entrega" | "retirada">("entrega");
+  const [complemento, setComplemento] = useState("");
+  const [trocoPara, setTrocoPara] = useState("");
+  const [carrinhoCarregado, setCarrinhoCarregado] = useState(false);
 
   useEffect(() => {
     const cancelar = onSnapshot(
       collection(db, "produtos"),
       (snapshot) => {
         const lista = snapshot.docs
-  .map((documento) => {
-    const dados = documento.data() as Omit<ProdutoCardapio, "id">;
+          .map((documento) => {
+            const dados = documento.data() as Omit<ProdutoCardapio, "id">;
 
-    return {
-      id: documento.id,
-      ...dados,
-    };
-  })
-  .filter((produto) => produto.ativo !== false);
+            return {
+              id: documento.id,
+              ...dados,
+            };
+          })
+          .filter((produto) => produto.ativo !== false)
+          .sort((a, b) => {
+            const ordemA = a.ordem ?? 9999;
+            const ordemB = b.ordem ?? 9999;
+
+            if (ordemA !== ordemB) return ordemA - ordemB;
+            return a.nome.localeCompare(b.nome, "pt-BR");
+          });
 
         setProdutos(lista);
+        setErroProdutos("");
+        setCarregandoProdutos(false);
       },
       (error) => {
         console.error("Erro ao carregar o cardápio:", error);
+        setErroProdutos("Não foi possível carregar o cardápio agora.");
+        setCarregandoProdutos(false);
       }
     );
 
     return () => cancelar();
   }, []);
+
+  useEffect(() => {
+    try {
+      const salvo = window.localStorage.getItem("delivery-yeshua-carrinho");
+
+      if (salvo) {
+        setCarrinho(JSON.parse(salvo));
+      }
+    } catch (error) {
+      console.error("Erro ao restaurar carrinho:", error);
+    } finally {
+      setCarrinhoCarregado(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!carrinhoCarregado) return;
+
+    window.localStorage.setItem(
+      "delivery-yeshua-carrinho",
+      JSON.stringify(carrinho)
+    );
+  }, [carrinho, carrinhoCarregado]);
 
   useEffect(() => {
     function atualizarStatusLoja() {
@@ -84,15 +126,29 @@ export default function Home() {
     return () => window.clearInterval(intervalo);
   }, []);
 
-  const produtosFiltrados = produtos.filter((produto) =>
-    `${produto.nome} ${produto.descricao}`
-      .toLowerCase()
-      .includes(busca.trim().toLowerCase())
-  );
+  const produtosFiltrados = useMemo(() => {
+    const termo = busca.trim().toLowerCase();
 
-  const produtosDestaque = produtos.filter((produto) =>
-    ["Xis Salada", "X Frango", "X Calabresa"].includes(produto.nome)
-  );
+    if (!termo) return produtos;
+
+    return produtos.filter((produto) =>
+      `${produto.nome} ${produto.descricao} ${produto.categoria}`
+        .toLowerCase()
+        .includes(termo)
+    );
+  }, [produtos, busca]);
+
+  const produtosDestaque = useMemo(() => {
+    const destacados = produtos.filter((produto) => produto.destaque === true);
+
+    if (destacados.length > 0) return destacados.slice(0, 6);
+
+    return produtos
+      .filter((produto) =>
+        ["Xis Salada", "X Frango", "X Calabresa"].includes(produto.nome)
+      )
+      .slice(0, 6);
+  }, [produtos]);
 
   const categorias = [
     "Lanches",
@@ -162,13 +218,29 @@ export default function Home() {
     0
   );
 
-  const totalComEntrega = valorTotal + taxaEntrega;
-  const tempoEntrega = "40–60 minutos";
+  const taxaAplicada = tipoEntrega === "entrega" ? taxaEntrega : 0;
+  const totalComEntrega = valorTotal + taxaAplicada;
+  const tempoEntrega =
+    tipoEntrega === "entrega" ? "40–60 minutos" : "20–35 minutos";
 
   function confirmarPedido() {
-    if (!nome.trim() || !telefone.trim() || !endereco.trim() || !bairro) {
-      alert("Preencha nome, telefone, endereço e bairro.");
+    if (!nome.trim() || !telefone.trim()) {
+      alert("Preencha nome e telefone.");
       return;
+    }
+
+    if (tipoEntrega === "entrega" && (!endereco.trim() || !bairro)) {
+      alert("Preencha endereço e bairro para entrega.");
+      return;
+    }
+
+    if (pagamento === "Dinheiro" && trocoPara.trim()) {
+      const valorTroco = Number(trocoPara.replace(",", "."));
+
+      if (Number.isNaN(valorTroco) || valorTroco < totalComEntrega) {
+        alert("O valor para troco precisa ser maior ou igual ao total do pedido.");
+        return;
+      }
     }
 
     if (carrinho.length === 0) {
@@ -200,10 +272,13 @@ export default function Home() {
 
 Cliente: ${nome}
 Telefone: ${telefone}
-Endereço: ${endereco}
-Bairro: ${bairro}
+Tipo: ${tipoEntrega === "entrega" ? "Entrega" : "Retirada no local"}
+Endereço: ${tipoEntrega === "entrega" ? endereco : "Retirada no local"}
+Complemento: ${tipoEntrega === "entrega" ? complemento.trim() || "Nenhum" : "-"}
+Bairro: ${tipoEntrega === "entrega" ? bairro : "-"}
 Tempo estimado: ${tempoEntrega}
 Pagamento: ${pagamento}
+${pagamento === "Dinheiro" ? `Troco para: ${trocoPara.trim() || "Não informado"}` : ""}
 
 Itens:
 ${itens}
@@ -211,7 +286,7 @@ ${itens}
 Observações: ${observacao.trim() || "Nenhuma"}
 
 Subtotal: R$ ${valorTotal.toFixed(2).replace(".", ",")}
-Taxa de entrega: R$ ${taxaEntrega.toFixed(2).replace(".", ",")}
+Taxa de entrega: R$ ${taxaAplicada.toFixed(2).replace(".", ",")}
 Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
 
     const telefoneLoja = "5551994154447";
@@ -226,10 +301,13 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
     setNome("");
     setTelefone("");
     setEndereco("");
+    setComplemento("");
     setBairro("");
     setTaxaEntrega(0);
     setObservacao("");
     setPagamento("Pix");
+    setTrocoPara("");
+    setTipoEntrega("entrega");
     setNumeroPedido("");
   }
 
@@ -290,7 +368,24 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
           />
         </div>
 
-        {!busca.trim() && (
+        {carregandoProdutos && (
+          <div className="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div
+                key={index}
+                className="h-80 animate-pulse rounded-2xl border border-zinc-800 bg-zinc-900"
+              />
+            ))}
+          </div>
+        )}
+
+        {!carregandoProdutos && erroProdutos && (
+          <div className="mt-10 rounded-2xl border border-red-500/30 bg-red-500/10 p-5 text-red-300">
+            {erroProdutos}
+          </div>
+        )}
+
+        {!carregandoProdutos && !erroProdutos && !busca.trim() && produtosDestaque.length > 0 && (
           <div className="mt-10">
             <h2 className="border-l-4 border-amber-500 pl-3 text-3xl font-black text-white">
               ⭐ Mais pedidos
@@ -313,24 +408,27 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
           </div>
         )}
 
-        <div className="mt-8 flex flex-wrap gap-3">
-          {categorias.map((categoria, index) => (
-            <button
-              key={categoria}
-              onClick={() =>
-                document.getElementById(categoria)?.scrollIntoView({
-                  behavior: "smooth",
-                })
-              }
-              className={`rounded-full px-5 py-2 font-bold ${
-                index === 0
-                  ? "bg-amber-500 text-black"
-                  : "bg-white text-black"
-              }`}
-            >
-              {categoria}
-            </button>
-          ))}
+        <div className="sticky top-0 z-30 -mx-4 mt-8 border-y border-zinc-800 bg-zinc-950/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+          <div className="flex gap-3 overflow-x-auto pb-1">
+            {categorias.map((categoria, index) => (
+              <button
+                key={categoria}
+                onClick={() =>
+                  document.getElementById(categoria)?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "start",
+                  })
+                }
+                className={`shrink-0 rounded-full px-5 py-2 font-bold transition ${
+                  index === 0
+                    ? "bg-amber-500 text-black hover:bg-amber-400"
+                    : "bg-zinc-800 text-white hover:bg-zinc-700"
+                }`}
+              >
+                {categoria}
+              </button>
+            ))}
+          </div>
         </div>
 
         {produtosFiltrados.length === 0 && (
@@ -506,6 +604,41 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
               </div>
 
               <div>
+                <label className="mb-2 block font-medium">Como você quer receber?</label>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setTipoEntrega("entrega")}
+                    className={`rounded-xl border px-4 py-3 font-bold ${
+                      tipoEntrega === "entrega"
+                        ? "border-amber-500 bg-amber-500 text-black"
+                        : "border-zinc-300 bg-white text-black"
+                    }`}
+                  >
+                    🛵 Entrega
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTipoEntrega("retirada");
+                      setTaxaEntrega(0);
+                    }}
+                    className={`rounded-xl border px-4 py-3 font-bold ${
+                      tipoEntrega === "retirada"
+                        ? "border-amber-500 bg-amber-500 text-black"
+                        : "border-zinc-300 bg-white text-black"
+                    }`}
+                  >
+                    🏪 Retirada
+                  </button>
+                </div>
+              </div>
+
+              {tipoEntrega === "entrega" && (
+                <>
+              <div>
                 <label className="mb-1 block font-medium">Endereço</label>
                 <input
                   type="text"
@@ -531,6 +664,19 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
                   <option value="Centro">Centro — R$ 4,00</option>
                 </select>
               </div>
+
+              <div>
+                <label className="mb-1 block font-medium">Complemento</label>
+                <input
+                  type="text"
+                  placeholder="Apto, bloco, referência..."
+                  value={complemento}
+                  onChange={(event) => setComplemento(event.target.value)}
+                  className="w-full rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-amber-500"
+                />
+              </div>
+                </>
+              )}
 
               <div className="rounded-xl border border-zinc-700 bg-zinc-900 p-4">
                 <p className="font-medium text-white">
@@ -570,6 +716,20 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
                 </select>
               </div>
 
+              {pagamento === "Dinheiro" && (
+                <div>
+                  <label className="mb-1 block font-medium">Troco para quanto?</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="Ex: 100,00"
+                    value={trocoPara}
+                    onChange={(event) => setTrocoPara(event.target.value)}
+                    className="w-full rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-amber-500"
+                  />
+                </div>
+              )}
+
               <div className="rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
                 <h3 className="text-lg font-bold text-white">
                   Resumo do pedido
@@ -602,7 +762,7 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
                   </div>
                   <div className="flex justify-between text-zinc-400">
                     <span>Taxa de entrega</span>
-                    <span>R$ {taxaEntrega.toFixed(2).replace(".", ",")}</span>
+                    <span>R$ {taxaAplicada.toFixed(2).replace(".", ",")}</span>
                   </div>
                   <div className="flex justify-between text-lg font-bold text-white">
                     <span>Total</span>
@@ -647,9 +807,21 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
             <div className="mt-6 space-y-2">
               <p><strong>Nome:</strong> {nome}</p>
               <p><strong>Telefone:</strong> {telefone}</p>
-              <p><strong>Endereço:</strong> {endereco}</p>
-              <p><strong>Bairro:</strong> {bairro}</p>
+              <p>
+                <strong>Tipo:</strong>{" "}
+                {tipoEntrega === "entrega" ? "Entrega" : "Retirada no local"}
+              </p>
+              {tipoEntrega === "entrega" && (
+                <>
+                  <p><strong>Endereço:</strong> {endereco}</p>
+                  <p><strong>Complemento:</strong> {complemento.trim() || "Nenhum"}</p>
+                  <p><strong>Bairro:</strong> {bairro}</p>
+                </>
+              )}
               <p><strong>Pagamento:</strong> {pagamento}</p>
+              {pagamento === "Dinheiro" && (
+                <p><strong>Troco para:</strong> {trocoPara.trim() || "Não informado"}</p>
+              )}
               <p><strong>Tempo estimado:</strong> {tempoEntrega}</p>
               <p>
                 <strong>Observações:</strong>{" "}
@@ -682,7 +854,7 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
               </div>
               <div className="flex justify-between text-sm text-zinc-600">
                 <span>Taxa de entrega</span>
-                <span>R$ {taxaEntrega.toFixed(2).replace(".", ",")}</span>
+                <span>R$ {taxaAplicada.toFixed(2).replace(".", ",")}</span>
               </div>
               <div className="flex justify-between text-xl font-bold">
                 <span>Total</span>
