@@ -5,11 +5,15 @@ import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import Header from "@/Components/Header";
 import ProductCard from "@/Components/ProductCard";
+import ProductModal from "@/Components/ProductModal";
 
 type ProdutoCarrinho = {
+  id: string;
+  produtoId: string;
   nome: string;
   preco: number;
   quantidade: number;
+  observacao?: string;
 };
 
 type ProdutoCardapio = {
@@ -24,8 +28,28 @@ type ProdutoCardapio = {
   ordem?: number;
 };
 
+const CARRINHO_KEY = "delivery-yeshua-carrinho";
+const TELEFONE_LOJA = "5551994154447";
+
+const TAXAS: Record<string, number> = {
+  Guajuviras: 5,
+  "Mato Grande": 7,
+  Olaria: 6,
+  Niterói: 8,
+  Centro: 4,
+};
+
+function moeda(valor: number) {
+  return valor.toFixed(2).replace(".", ",");
+}
+
+function gerarId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
 export default function Home() {
   const [produtos, setProdutos] = useState<ProdutoCardapio[]>([]);
+  const [produtoAberto, setProdutoAberto] = useState<ProdutoCardapio | null>(null);
   const [carrinho, setCarrinho] = useState<ProdutoCarrinho[]>([]);
   const [carrinhoAberto, setCarrinhoAberto] = useState(false);
   const [checkoutAberto, setCheckoutAberto] = useState(false);
@@ -36,7 +60,7 @@ export default function Home() {
   const [endereco, setEndereco] = useState("");
   const [pagamento, setPagamento] = useState("Pix");
   const [numeroPedido, setNumeroPedido] = useState("");
-  const [observacao, setObservacao] = useState("");
+  const [observacaoPedido, setObservacaoPedido] = useState("");
   const [busca, setBusca] = useState("");
   const [bairro, setBairro] = useState("");
   const [taxaEntrega, setTaxaEntrega] = useState(0);
@@ -57,17 +81,12 @@ export default function Home() {
         const lista = snapshot.docs
           .map((documento) => {
             const dados = documento.data() as Omit<ProdutoCardapio, "id">;
-
-            return {
-              id: documento.id,
-              ...dados,
-            };
+            return { id: documento.id, ...dados };
           })
           .filter((produto) => produto.ativo !== false)
           .sort((a, b) => {
             const ordemA = a.ordem ?? 9999;
             const ordemB = b.ordem ?? 9999;
-
             if (ordemA !== ordemB) return ordemA - ordemB;
             return a.nome.localeCompare(b.nome, "pt-BR");
           });
@@ -88,11 +107,31 @@ export default function Home() {
 
   useEffect(() => {
     try {
-      const salvo = window.localStorage.getItem("delivery-yeshua-carrinho");
+      const salvo = window.localStorage.getItem(CARRINHO_KEY);
+      if (!salvo) return;
 
-      if (salvo) {
-        setCarrinho(JSON.parse(salvo));
-      }
+      const dados = JSON.parse(salvo) as Array<Partial<ProdutoCarrinho>>;
+      if (!Array.isArray(dados)) return;
+
+      const normalizado = dados
+        .filter(
+          (item) =>
+            typeof item.nome === "string" &&
+            typeof item.preco === "number" &&
+            typeof item.quantidade === "number" &&
+            item.quantidade > 0
+        )
+        .map((item) => ({
+          id: typeof item.id === "string" ? item.id : gerarId(),
+          produtoId:
+            typeof item.produtoId === "string" ? item.produtoId : item.nome || gerarId(),
+          nome: item.nome || "Produto",
+          preco: item.preco || 0,
+          quantidade: Math.max(1, Math.floor(item.quantidade || 1)),
+          observacao: typeof item.observacao === "string" ? item.observacao : "",
+        }));
+
+      setCarrinho(normalizado);
     } catch (error) {
       console.error("Erro ao restaurar carrinho:", error);
     } finally {
@@ -102,18 +141,12 @@ export default function Home() {
 
   useEffect(() => {
     if (!carrinhoCarregado) return;
-
-    window.localStorage.setItem(
-      "delivery-yeshua-carrinho",
-      JSON.stringify(carrinho)
-    );
+    window.localStorage.setItem(CARRINHO_KEY, JSON.stringify(carrinho));
   }, [carrinho, carrinhoCarregado]);
 
   useEffect(() => {
     return () => {
-      if (avisoCarrinhoTimer.current) {
-        clearTimeout(avisoCarrinhoTimer.current);
-      }
+      if (avisoCarrinhoTimer.current) clearTimeout(avisoCarrinhoTimer.current);
     };
   }, []);
 
@@ -132,13 +165,11 @@ export default function Home() {
 
     atualizarStatusLoja();
     const intervalo = window.setInterval(atualizarStatusLoja, 60_000);
-
     return () => window.clearInterval(intervalo);
   }, []);
 
   const produtosFiltrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
-
     if (!termo) return produtos;
 
     return produtos.filter((produto) =>
@@ -150,7 +181,6 @@ export default function Home() {
 
   const produtosDestaque = useMemo(() => {
     const destacados = produtos.filter((produto) => produto.destaque === true);
-
     if (destacados.length > 0) return destacados.slice(0, 6);
 
     return produtos
@@ -160,72 +190,71 @@ export default function Home() {
       .slice(0, 6);
   }, [produtos]);
 
-  const categorias = [
-    "Lanches",
-    "Combos",
-    "Porções",
-    "Bebidas",
-    "Ala-Minutas",
-  ];
+  const categorias = ["Lanches", "Combos", "Porções", "Bebidas", "Ala-Minutas"];
 
   function selecionarBairro(nomeBairro: string) {
     setBairro(nomeBairro);
-
-    const taxas: Record<string, number> = {
-      Guajuviras: 5,
-      "Mato Grande": 7,
-      Olaria: 6,
-      Niterói: 8,
-      Centro: 4,
-    };
-
-    setTaxaEntrega(taxas[nomeBairro] ?? 0);
+    setTaxaEntrega(TAXAS[nomeBairro] ?? 0);
   }
 
-  function adicionarAoCarrinho(nome: string, preco: number) {
-    setCarrinho((carrinhoAtual) => {
-      const produtoExistente = carrinhoAtual.find(
-        (produto) => produto.nome === nome
+  function mostrarAviso(nomeProduto: string) {
+    setAvisoCarrinho(`${nomeProduto} foi adicionado à sacola.`);
+
+    if (avisoCarrinhoTimer.current) clearTimeout(avisoCarrinhoTimer.current);
+    avisoCarrinhoTimer.current = setTimeout(() => setAvisoCarrinho(""), 2500);
+  }
+
+  function adicionarProduto(
+    produto: ProdutoCardapio,
+    quantidade: number,
+    observacao: string
+  ) {
+    const obs = observacao.trim();
+
+    setCarrinho((atual) => {
+      const existente = atual.find(
+        (item) => item.produtoId === produto.id && (item.observacao || "") === obs
       );
 
-      if (produtoExistente) {
-        return carrinhoAtual.map((produto) =>
-          produto.nome === nome
-            ? { ...produto, quantidade: produto.quantidade + 1 }
-            : produto
+      if (existente) {
+        return atual.map((item) =>
+          item.id === existente.id
+            ? { ...item, quantidade: item.quantidade + quantidade }
+            : item
         );
       }
 
-      return [...carrinhoAtual, { nome, preco, quantidade: 1 }];
+      return [
+        ...atual,
+        {
+          id: gerarId(),
+          produtoId: produto.id,
+          nome: produto.nome,
+          preco: produto.preco,
+          quantidade,
+          observacao: obs,
+        },
+      ];
     });
 
-    setAvisoCarrinho(`${nome} foi adicionado ao carrinho.`);
-
-    if (avisoCarrinhoTimer.current) {
-      clearTimeout(avisoCarrinhoTimer.current);
-    }
-
-    avisoCarrinhoTimer.current = setTimeout(() => {
-      setAvisoCarrinho("");
-    }, 2500);
+    setProdutoAberto(null);
+    mostrarAviso(produto.nome);
   }
 
-  function diminuirQuantidade(nome: string) {
-    setCarrinho((carrinhoAtual) =>
-      carrinhoAtual
-        .map((produto) =>
-          produto.nome === nome
-            ? { ...produto, quantidade: produto.quantidade - 1 }
-            : produto
+  function alterarQuantidade(itemId: string, delta: number) {
+    setCarrinho((atual) =>
+      atual
+        .map((item) =>
+          item.id === itemId
+            ? { ...item, quantidade: item.quantidade + delta }
+            : item
         )
-        .filter((produto) => produto.quantidade > 0)
+        .filter((item) => item.quantidade > 0)
     );
   }
 
-  function removerProduto(nome: string) {
-    setCarrinho((carrinhoAtual) =>
-      carrinhoAtual.filter((produto) => produto.nome !== nome)
-    );
+  function removerProduto(itemId: string) {
+    setCarrinho((atual) => atual.filter((item) => item.id !== itemId));
   }
 
   const quantidadeTotal = carrinho.reduce(
@@ -240,8 +269,13 @@ export default function Home() {
 
   const taxaAplicada = tipoEntrega === "entrega" ? taxaEntrega : 0;
   const totalComEntrega = valorTotal + taxaAplicada;
-  const tempoEntrega =
-    tipoEntrega === "entrega" ? "40–60 minutos" : "20–35 minutos";
+  const tempoEntrega = tipoEntrega === "entrega" ? "40–60 minutos" : "20–35 minutos";
+
+  function abrirCheckout() {
+    if (carrinho.length === 0) return;
+    setCarrinhoAberto(false);
+    setCheckoutAberto(true);
+  }
 
   function confirmarPedido() {
     if (!nome.trim() || !telefone.trim()) {
@@ -256,7 +290,6 @@ export default function Home() {
 
     if (pagamento === "Dinheiro" && trocoPara.trim()) {
       const valorTroco = Number(trocoPara.replace(",", "."));
-
       if (Number.isNaN(valorTroco) || valorTroco < totalComEntrega) {
         alert("O valor para troco precisa ser maior ou igual ao total do pedido.");
         return;
@@ -264,12 +297,11 @@ export default function Home() {
     }
 
     if (carrinho.length === 0) {
-      alert("Seu carrinho está vazio.");
+      alert("Sua sacola está vazia.");
       return;
     }
 
-    const numero = Math.floor(1000 + Math.random() * 9000);
-    setNumeroPedido(numero.toString());
+    setNumeroPedido(String(Math.floor(1000 + Math.random() * 9000)));
     setCheckoutAberto(false);
     setPedidoConfirmado(true);
   }
@@ -278,42 +310,43 @@ export default function Home() {
     if (!numeroPedido || carrinho.length === 0) return;
 
     const itens = carrinho
-      .map(
-        (produto) =>
-          `${produto.quantidade}x ${produto.nome} - R$ ${(
-            produto.preco * produto.quantidade
-          )
-            .toFixed(2)
-            .replace(".", ",")}`
-      )
-      .join("\n");
+      .map((produto) => {
+        const subtotal = produto.preco * produto.quantidade;
+        const obs = produto.observacao ? `\n   Obs.: ${produto.observacao}` : "";
+        return `${produto.quantidade}x ${produto.nome} — R$ ${moeda(subtotal)}${obs}`;
+      })
+      .join("\n\n");
 
-    const mensagem = `Pedido #${numeroPedido}
+    const mensagem = `🍔 NOVO PEDIDO — DELIVERY YESHUA
+Pedido #${numeroPedido}
 
-Cliente: ${nome}
-Telefone: ${telefone}
-Tipo: ${tipoEntrega === "entrega" ? "Entrega" : "Retirada no local"}
-Endereço: ${tipoEntrega === "entrega" ? endereco : "Retirada no local"}
-Complemento: ${tipoEntrega === "entrega" ? complemento.trim() || "Nenhum" : "-"}
-Bairro: ${tipoEntrega === "entrega" ? bairro : "-"}
-Tempo estimado: ${tempoEntrega}
-Pagamento: ${pagamento}
-${pagamento === "Dinheiro" ? `Troco para: ${trocoPara.trim() || "Não informado"}` : ""}
+👤 Cliente: ${nome.trim()}
+📱 Telefone: ${telefone.trim()}
+🚚 Tipo: ${tipoEntrega === "entrega" ? "Entrega" : "Retirada no local"}
+${
+      tipoEntrega === "entrega"
+        ? `📍 Endereço: ${endereco.trim()}\n🏠 Complemento: ${
+            complemento.trim() || "Nenhum"
+          }\n🗺️ Bairro: ${bairro}`
+        : "📍 Retirada no local"
+    }
+⏱️ Estimativa: ${tempoEntrega}
+💳 Pagamento: ${pagamento}${
+      pagamento === "Dinheiro"
+        ? `\n💵 Troco para: ${trocoPara.trim() || "Não informado"}`
+        : ""
+    }
 
-Itens:
+🧾 ITENS
 ${itens}
 
-Observações: ${observacao.trim() || "Nenhuma"}
+📝 Observação geral: ${observacaoPedido.trim() || "Nenhuma"}
 
-Subtotal: R$ ${valorTotal.toFixed(2).replace(".", ",")}
-Taxa de entrega: R$ ${taxaAplicada.toFixed(2).replace(".", ",")}
-Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
+Subtotal: R$ ${moeda(valorTotal)}
+Taxa de entrega: R$ ${moeda(taxaAplicada)}
+*TOTAL: R$ ${moeda(totalComEntrega)}*`;
 
-    const telefoneLoja = "5551994154447";
-    const link = `https://wa.me/${telefoneLoja}?text=${encodeURIComponent(
-      mensagem
-    )}`;
-
+    const link = `https://wa.me/${TELEFONE_LOJA}?text=${encodeURIComponent(mensagem)}`;
     window.open(link, "_blank", "noopener,noreferrer");
 
     setCarrinho([]);
@@ -324,7 +357,7 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
     setComplemento("");
     setBairro("");
     setTaxaEntrega(0);
-    setObservacao("");
+    setObservacaoPedido("");
     setPagamento("Pix");
     setTrocoPara("");
     setTipoEntrega("entrega");
@@ -344,8 +377,9 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
 
           <div className="relative px-5 pb-5 sm:px-6">
             <div className="-mt-10 flex items-end justify-between gap-4">
-              <div className="flex items-end gap-4">
-                <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl border-4 border-white bg-white shadow-md">
+              <div className="flex min-w-0 items-end gap-4">
+                <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-4 border-white bg-white shadow-md">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src="/produtos/DELIVERY.png"
                     alt="Delivery Yeshua"
@@ -353,16 +387,18 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
                   />
                 </div>
 
-                <div className="pb-1">
-                  <h2 className="text-2xl font-black text-zinc-900 sm:text-3xl">
+                <div className="min-w-0 pb-1">
+                  <h1 className="truncate text-2xl font-black text-zinc-900 sm:text-3xl">
                     Delivery Yeshua
-                  </h2>
-                  <p className="text-sm text-zinc-500">Lanches • Combos • Porções</p>
+                  </h1>
+                  <p className="truncate text-sm text-zinc-500">
+                    Lanches • Combos • Porções
+                  </p>
                 </div>
               </div>
 
               <span
-                className={`mb-1 rounded-full px-3 py-1 text-xs font-bold ${
+                className={`mb-1 shrink-0 rounded-full px-3 py-1 text-xs font-bold ${
                   lojaAberta
                     ? "bg-emerald-50 text-emerald-700"
                     : "bg-red-50 text-red-600"
@@ -372,14 +408,14 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
               </span>
             </div>
 
-            <div className="mt-5 grid grid-cols-3 divide-x divide-zinc-200 rounded-xl border border-zinc-200 bg-zinc-50 py-3 text-center">
+            <div className="mt-5 grid grid-cols-2 divide-x divide-zinc-200 rounded-xl border border-zinc-200 bg-zinc-50 py-3 text-center sm:grid-cols-3">
               <div>
                 <p className="text-xs text-zinc-500">Entrega</p>
                 <p className="mt-1 text-sm font-bold text-zinc-900">40–60 min</p>
               </div>
-              <div>
-                <p className="text-xs text-zinc-500">Pedido mínimo</p>
-                <p className="mt-1 text-sm font-bold text-zinc-900">Sem mínimo</p>
+              <div className="hidden sm:block">
+                <p className="text-xs text-zinc-500">Funcionamento</p>
+                <p className="mt-1 text-sm font-bold text-zinc-900">Todos os dias</p>
               </div>
               <div>
                 <p className="text-xs text-zinc-500">Horário</p>
@@ -391,8 +427,8 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
 
         <div className="mt-6">
           <input
-            type="text"
-            placeholder="🔎 Buscar no cardápio..."
+            type="search"
+            placeholder="Buscar no cardápio..."
             value={busca}
             onChange={(event) => setBusca(event.target.value)}
             className="w-full rounded-xl border border-zinc-200 bg-white px-5 py-4 text-zinc-900 shadow-sm outline-none placeholder:text-zinc-500 focus:border-red-500 focus:ring-2 focus:ring-red-500/10"
@@ -400,11 +436,11 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
         </div>
 
         {carregandoProdutos && (
-          <div className="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-10 grid gap-3 md:grid-cols-2">
             {Array.from({ length: 6 }).map((_, index) => (
               <div
                 key={index}
-                className="h-44 animate-pulse rounded-2xl border border-zinc-200 bg-white"
+                className="h-40 animate-pulse rounded-2xl border border-zinc-200 bg-white"
               />
             ))}
           </div>
@@ -416,45 +452,40 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
           </div>
         )}
 
-        {!carregandoProdutos && !erroProdutos && !busca.trim() && produtosDestaque.length > 0 && (
-          <div className="mt-10">
-            <h2 className="text-2xl font-black text-zinc-900">
-              ⭐ Mais pedidos
-            </h2>
-
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              {produtosDestaque.map((produto) => (
-                <ProductCard
-                  key={`destaque-${produto.nome}`}
-                  nome={produto.nome}
-                  descricao={produto.descricao}
-                  preco={produto.preco.toFixed(2).replace(".", ",")}
-                  imagem={produto.imagem}
-                  adicionarAoCarrinho={() =>
-                    adicionarAoCarrinho(produto.nome, produto.preco)
-                  }
-                />
-              ))}
+        {!carregandoProdutos &&
+          !erroProdutos &&
+          !busca.trim() &&
+          produtosDestaque.length > 0 && (
+            <div className="mt-10">
+              <h2 className="text-2xl font-black text-zinc-900">Mais pedidos</h2>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                {produtosDestaque.map((produto) => (
+                  <ProductCard
+                    key={`destaque-${produto.id}`}
+                    nome={produto.nome}
+                    descricao={produto.descricao}
+                    preco={moeda(produto.preco)}
+                    imagem={produto.imagem}
+                    abrirDetalhes={() => setProdutoAberto(produto)}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
         <div className="sticky top-[76px] z-30 -mx-4 mt-7 border-y border-zinc-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
           <div className="flex gap-3 overflow-x-auto pb-1">
-            {categorias.map((categoria, index) => (
+            {categorias.map((categoria) => (
               <button
                 key={categoria}
+                type="button"
                 onClick={() =>
                   document.getElementById(categoria)?.scrollIntoView({
                     behavior: "smooth",
                     block: "start",
                   })
                 }
-                className={`shrink-0 rounded-full px-5 py-2 font-bold transition ${
-                  index === 0
-                    ? "bg-red-600 text-white hover:bg-red-500"
-                    : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
-                }`}
+                className="shrink-0 rounded-full bg-zinc-100 px-5 py-2 font-bold text-zinc-700 transition hover:bg-red-50 hover:text-red-600"
               >
                 {categoria}
               </button>
@@ -462,7 +493,7 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
           </div>
         </div>
 
-        {produtosFiltrados.length === 0 && (
+        {produtosFiltrados.length === 0 && !carregandoProdutos && (
           <div className="mt-10 rounded-2xl border border-zinc-200 bg-white p-6 text-center text-zinc-500">
             Nenhum produto encontrado para “{busca}”.
           </div>
@@ -472,30 +503,20 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
           const produtosDaCategoria = produtosFiltrados.filter(
             (produto) => produto.categoria === categoria
           );
-
           if (produtosDaCategoria.length === 0) return null;
 
           return (
-            <div
-              key={categoria}
-              id={categoria}
-              className="mt-8 scroll-mt-40"
-            >
-              <h2 className="text-2xl font-black text-zinc-900">
-                {categoria}
-              </h2>
-
+            <div key={categoria} id={categoria} className="mt-8 scroll-mt-40">
+              <h2 className="text-2xl font-black text-zinc-900">{categoria}</h2>
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 {produtosDaCategoria.map((produto) => (
                   <ProductCard
-                    key={produto.nome}
+                    key={produto.id}
                     nome={produto.nome}
                     descricao={produto.descricao}
-                    preco={produto.preco.toFixed(2).replace(".", ",")}
+                    preco={moeda(produto.preco)}
                     imagem={produto.imagem}
-                    adicionarAoCarrinho={() =>
-                      adicionarAoCarrinho(produto.nome, produto.preco)
-                    }
+                    abrirDetalhes={() => setProdutoAberto(produto)}
                   />
                 ))}
               </div>
@@ -504,12 +525,19 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
         })}
       </section>
 
+      {produtoAberto && (
+        <ProductModal
+          produto={produtoAberto}
+          fechar={() => setProdutoAberto(null)}
+          adicionar={adicionarProduto}
+        />
+      )}
 
       {avisoCarrinho && (
         <div
           role="status"
           aria-live="polite"
-          className="fixed left-1/2 top-24 z-[60] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-zinc-900 shadow-2xl"
+          className="fixed left-1/2 top-24 z-[70] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-zinc-900 shadow-2xl"
         >
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
@@ -524,337 +552,323 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
               }}
               className="shrink-0 rounded-xl bg-red-600 px-3 py-2 text-sm font-black text-white transition hover:bg-red-500"
             >
-              Ver carrinho
+              Ver sacola
             </button>
           </div>
         </div>
       )}
 
-      {quantidadeTotal > 0 && !carrinhoAberto && !checkoutAberto && !pedidoConfirmado && (
-        <div className="fixed inset-x-0 bottom-0 z-50 border-t border-zinc-200 bg-white/95 p-3 shadow-2xl backdrop-blur md:hidden">
-          <button
-            type="button"
-            onClick={() => setCarrinhoAberto(true)}
-            className="mx-auto flex w-full max-w-lg items-center justify-between gap-4 rounded-xl bg-red-600 px-5 py-3.5 text-left text-white shadow-lg transition active:scale-[0.99]"
-          >
-            <div>
-              <p className="text-sm font-black">
-                🛒 {quantidadeTotal} {quantidadeTotal === 1 ? "item" : "itens"} no carrinho
-              </p>
-              <p className="text-xs font-bold opacity-80">
-                R$ {valorTotal.toFixed(2).replace(".", ",")}
-              </p>
-            </div>
-            <span className="font-black">Ver carrinho →</span>
-          </button>
-        </div>
-      )}
+      {quantidadeTotal > 0 &&
+        !carrinhoAberto &&
+        !checkoutAberto &&
+        !pedidoConfirmado &&
+        !produtoAberto && (
+          <div className="fixed inset-x-0 bottom-0 z-50 border-t border-zinc-200 bg-white/95 p-3 shadow-2xl backdrop-blur md:hidden">
+            <button
+              type="button"
+              onClick={() => setCarrinhoAberto(true)}
+              className="mx-auto flex w-full max-w-lg items-center justify-between gap-4 rounded-xl bg-red-600 px-5 py-3.5 text-left text-white shadow-lg transition active:scale-[0.99]"
+            >
+              <div>
+                <p className="text-sm font-black">
+                  {quantidadeTotal} {quantidadeTotal === 1 ? "item" : "itens"} na sacola
+                </p>
+                <p className="text-xs font-bold opacity-85">R$ {moeda(valorTotal)}</p>
+              </div>
+              <span className="font-black">Ver sacola →</span>
+            </button>
+          </div>
+        )}
 
       {carrinhoAberto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 text-black">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold">Seu carrinho</h2>
+        <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 sm:items-center sm:p-4">
+          <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-white text-zinc-900 shadow-2xl sm:rounded-3xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-100 bg-white px-5 py-4">
+              <div>
+                <h2 className="text-xl font-black">Sua sacola</h2>
+                <p className="text-sm text-zinc-500">
+                  {quantidadeTotal} {quantidadeTotal === 1 ? "item" : "itens"}
+                </p>
+              </div>
               <button
+                type="button"
                 onClick={() => setCarrinhoAberto(false)}
-                className="text-2xl"
-                aria-label="Fechar carrinho"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-xl"
+                aria-label="Fechar sacola"
               >
                 ✕
               </button>
             </div>
 
-            {carrinho.length === 0 ? (
-              <p className="mt-6 text-zinc-500">Seu carrinho está vazio.</p>
-            ) : (
-              <>
-                <div className="mt-6 space-y-4">
-                  {carrinho.map((produto) => (
-                    <div
-                      key={produto.nome}
-                      className="border-b border-zinc-200 pb-4"
-                    >
-                      <div className="flex items-center justify-between gap-4">
-                        <div>
-                          <p className="font-semibold">{produto.nome}</p>
-                          <p className="text-sm text-zinc-500">
-                            R$ {produto.preco.toFixed(2).replace(".", ",")} cada
-                          </p>
+            <div className="p-5">
+              {carrinho.length === 0 ? (
+                <div className="py-10 text-center">
+                  <p className="text-lg font-bold">Sua sacola está vazia</p>
+                  <p className="mt-1 text-sm text-zinc-500">
+                    Escolha um produto do cardápio para começar.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-5">
+                    {carrinho.map((produto) => (
+                      <div key={produto.id} className="border-b border-zinc-100 pb-5">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0">
+                            <p className="font-bold text-zinc-900">{produto.nome}</p>
+                            <p className="mt-1 text-sm text-zinc-500">
+                              R$ {moeda(produto.preco)} cada
+                            </p>
+                            {produto.observacao && (
+                              <p className="mt-2 rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-600">
+                                Obs.: {produto.observacao}
+                              </p>
+                            )}
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => removerProduto(produto.id)}
+                            className="shrink-0 text-sm font-bold text-red-600"
+                          >
+                            Remover
+                          </button>
                         </div>
 
-                        <button
-                          onClick={() => removerProduto(produto.nome)}
-                          className="text-sm text-red-600"
-                        >
-                          Remover
-                        </button>
-                      </div>
+                        <div className="mt-4 flex items-center justify-between gap-4">
+                          <div className="flex items-center rounded-full border border-zinc-200 bg-white">
+                            <button
+                              type="button"
+                              onClick={() => alterarQuantidade(produto.id, -1)}
+                              className="flex h-9 w-9 items-center justify-center rounded-full text-xl font-bold text-red-600"
+                              aria-label={`Diminuir ${produto.nome}`}
+                            >
+                              −
+                            </button>
+                            <span className="min-w-8 text-center font-bold">
+                              {produto.quantidade}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => alterarQuantidade(produto.id, 1)}
+                              className="flex h-9 w-9 items-center justify-center rounded-full text-xl font-bold text-red-600"
+                              aria-label={`Aumentar ${produto.nome}`}
+                            >
+                              +
+                            </button>
+                          </div>
 
-                      <div className="mt-3 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <button
-                            onClick={() => diminuirQuantidade(produto.nome)}
-                            className="h-8 w-8 rounded-full bg-zinc-200 font-bold"
-                          >
-                            -
-                          </button>
-
-                          <span className="font-semibold">
-                            {produto.quantidade}
+                          <span className="font-black text-zinc-900">
+                            R$ {moeda(produto.preco * produto.quantidade)}
                           </span>
-
-                          <button
-                            onClick={() =>
-                              adicionarAoCarrinho(produto.nome, produto.preco)
-                            }
-                            className="h-8 w-8 rounded-full bg-black font-bold text-zinc-900"
-                          >
-                            +
-                          </button>
                         </div>
-
-                        <span className="font-bold">
-                          R$ {(produto.preco * produto.quantidade)
-                            .toFixed(2)
-                            .replace(".", ",")}
-                        </span>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
 
-                <div className="mt-6 flex justify-between text-xl font-bold">
-                  <span>Subtotal</span>
-                  <span>R$ {valorTotal.toFixed(2).replace(".", ",")}</span>
-                </div>
+                  <div className="mt-6 flex items-center justify-between text-lg font-black">
+                    <span>Subtotal</span>
+                    <span>R$ {moeda(valorTotal)}</span>
+                  </div>
 
-                <button
-                  onClick={() => {
-                    setCarrinhoAberto(false);
-                    setCheckoutAberto(true);
-                  }}
-                  className="mt-6 w-full rounded-xl bg-red-600 py-3 font-bold text-white"
-                >
-                  Finalizar pedido
-                </button>
-              </>
-            )}
+                  <button
+                    type="button"
+                    onClick={abrirCheckout}
+                    className="mt-6 w-full rounded-xl bg-red-600 py-3.5 font-black text-white transition hover:bg-red-500"
+                  >
+                    Continuar
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}
 
       {checkoutAberto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 text-black">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold">Finalizar pedido</h2>
+        <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 sm:items-center sm:p-4">
+          <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-white text-zinc-900 shadow-2xl sm:rounded-3xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-100 bg-white px-5 py-4">
+              <div>
+                <h2 className="text-xl font-black">Finalizar pedido</h2>
+                <p className="text-sm text-zinc-500">Revise os dados antes de enviar</p>
+              </div>
               <button
+                type="button"
                 onClick={() => setCheckoutAberto(false)}
-                className="text-2xl"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-xl"
                 aria-label="Fechar checkout"
               >
                 ✕
               </button>
             </div>
 
-            <div className="mt-6 space-y-4">
-              <div>
-                <label className="mb-1 block font-medium">Nome</label>
-                <input
-                  type="text"
-                  placeholder="Digite seu nome"
-                  value={nome}
-                  onChange={(event) => setNome(event.target.value)}
-                  className="w-full rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-red-500"
-                />
-              </div>
+            <div className="space-y-6 p-5">
+              <section>
+                <h3 className="font-black">Seus dados</h3>
+                <div className="mt-3 space-y-3">
+                  <input
+                    type="text"
+                    placeholder="Seu nome"
+                    value={nome}
+                    onChange={(event) => setNome(event.target.value)}
+                    className="w-full rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-red-500"
+                  />
+                  <input
+                    type="tel"
+                    placeholder="Seu telefone"
+                    value={telefone}
+                    onChange={(event) => setTelefone(event.target.value)}
+                    className="w-full rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-red-500"
+                  />
+                </div>
+              </section>
 
-              <div>
-                <label className="mb-1 block font-medium">Telefone</label>
-                <input
-                  type="tel"
-                  placeholder="(00) 00000-0000"
-                  value={telefone}
-                  onChange={(event) => setTelefone(event.target.value)}
-                  className="w-full rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-red-500"
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block font-medium">Como você quer receber?</label>
-
-                <div className="grid grid-cols-2 gap-3">
+              <section>
+                <h3 className="font-black">Como você quer receber?</h3>
+                <div className="mt-3 grid grid-cols-2 gap-3">
                   <button
                     type="button"
                     onClick={() => setTipoEntrega("entrega")}
-                    className={`rounded-xl border px-4 py-3 font-bold ${
+                    className={`rounded-xl border px-4 py-3 font-bold transition ${
                       tipoEntrega === "entrega"
-                        ? "border-red-600 bg-red-600 text-black"
-                        : "border-zinc-300 bg-white text-black"
+                        ? "border-red-600 bg-red-50 text-red-600"
+                        : "border-zinc-300 bg-white text-zinc-700"
                     }`}
                   >
                     🛵 Entrega
                   </button>
-
                   <button
                     type="button"
-                    onClick={() => {
-                      setTipoEntrega("retirada");
-                      setTaxaEntrega(0);
-                    }}
-                    className={`rounded-xl border px-4 py-3 font-bold ${
+                    onClick={() => setTipoEntrega("retirada")}
+                    className={`rounded-xl border px-4 py-3 font-bold transition ${
                       tipoEntrega === "retirada"
-                        ? "border-red-600 bg-red-600 text-black"
-                        : "border-zinc-300 bg-white text-black"
+                        ? "border-red-600 bg-red-50 text-red-600"
+                        : "border-zinc-300 bg-white text-zinc-700"
                     }`}
                   >
                     🏪 Retirada
                   </button>
                 </div>
-              </div>
+              </section>
 
               {tipoEntrega === "entrega" && (
-                <>
-              <div>
-                <label className="mb-1 block font-medium">Endereço</label>
-                <input
-                  type="text"
-                  placeholder="Rua e número"
-                  value={endereco}
-                  onChange={(event) => setEndereco(event.target.value)}
-                  className="w-full rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-red-500"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block font-medium">Bairro</label>
-                <select
-                  value={bairro}
-                  onChange={(event) => selecionarBairro(event.target.value)}
-                  className="w-full rounded-xl border border-zinc-300 px-4 py-3 text-black outline-none focus:border-red-500"
-                >
-                  <option value="">Selecione seu bairro</option>
-                  <option value="Guajuviras">Guajuviras — R$ 5,00</option>
-                  <option value="Mato Grande">Mato Grande — R$ 7,00</option>
-                  <option value="Olaria">Olaria — R$ 6,00</option>
-                  <option value="Niterói">Niterói — R$ 8,00</option>
-                  <option value="Centro">Centro — R$ 4,00</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-1 block font-medium">Complemento</label>
-                <input
-                  type="text"
-                  placeholder="Apto, bloco, referência..."
-                  value={complemento}
-                  onChange={(event) => setComplemento(event.target.value)}
-                  className="w-full rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-red-500"
-                />
-              </div>
-                </>
+                <section>
+                  <h3 className="font-black">Endereço de entrega</h3>
+                  <div className="mt-3 space-y-3">
+                    <input
+                      type="text"
+                      placeholder="Rua e número"
+                      value={endereco}
+                      onChange={(event) => setEndereco(event.target.value)}
+                      className="w-full rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-red-500"
+                    />
+                    <select
+                      value={bairro}
+                      onChange={(event) => selecionarBairro(event.target.value)}
+                      className="w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 outline-none focus:border-red-500"
+                    >
+                      <option value="">Selecione seu bairro</option>
+                      {Object.entries(TAXAS).map(([nomeBairro, taxa]) => (
+                        <option key={nomeBairro} value={nomeBairro}>
+                          {nomeBairro} — R$ {moeda(taxa)}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      placeholder="Complemento ou referência (opcional)"
+                      value={complemento}
+                      onChange={(event) => setComplemento(event.target.value)}
+                      className="w-full rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-red-500"
+                    />
+                  </div>
+                </section>
               )}
 
-              <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-                <p className="font-medium text-zinc-900">
-                  🛵 Tempo estimado de entrega
-                </p>
-                <p className="mt-1 text-sm text-zinc-500">{tempoEntrega}</p>
-              </div>
-
-              <div>
-                <label className="mb-1 block font-medium">
-                  Observações do pedido
-                </label>
-                <textarea
-                  placeholder="Ex: sem tomate, sem cebola..."
-                  value={observacao}
-                  onChange={(event) => setObservacao(event.target.value)}
-                  maxLength={300}
-                  className="min-h-24 w-full resize-none rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-red-500"
-                />
-                <p className="mt-1 text-right text-xs text-zinc-500">
-                  {observacao.length}/300
-                </p>
-              </div>
-
-              <div>
-                <label className="mb-1 block font-medium">
-                  Forma de pagamento
-                </label>
+              <section>
+                <h3 className="font-black">Pagamento</h3>
                 <select
                   value={pagamento}
                   onChange={(event) => setPagamento(event.target.value)}
-                  className="w-full rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-red-500"
+                  className="mt-3 w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 outline-none focus:border-red-500"
                 >
                   <option value="Pix">Pix</option>
                   <option value="Dinheiro">Dinheiro</option>
                   <option value="Cartão na entrega">Cartão na entrega</option>
                 </select>
-              </div>
 
-              {pagamento === "Dinheiro" && (
-                <div>
-                  <label className="mb-1 block font-medium">Troco para quanto?</label>
+                {pagamento === "Dinheiro" && (
                   <input
                     type="text"
                     inputMode="decimal"
-                    placeholder="Ex: 100,00"
+                    placeholder="Troco para quanto? Ex: 100,00"
                     value={trocoPara}
                     onChange={(event) => setTrocoPara(event.target.value)}
-                    className="w-full rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-red-500"
+                    className="mt-3 w-full rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-red-500"
                   />
-                </div>
-              )}
+                )}
+              </section>
 
-              <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-5">
-                <h3 className="text-lg font-bold text-zinc-900">
-                  Resumo do pedido
-                </h3>
+              <section>
+                <h3 className="font-black">Observação geral</h3>
+                <textarea
+                  placeholder="Ex: chamar no portão, não tocar campainha..."
+                  value={observacaoPedido}
+                  onChange={(event) => setObservacaoPedido(event.target.value)}
+                  maxLength={300}
+                  className="mt-3 min-h-24 w-full resize-none rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-red-500"
+                />
+                <p className="mt-1 text-right text-xs text-zinc-500">
+                  {observacaoPedido.length}/300
+                </p>
+              </section>
 
-                <div className="mt-4 space-y-3">
+              <section className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+                <h3 className="font-black">Resumo</h3>
+                <div className="mt-3 space-y-2 text-sm">
                   {carrinho.map((produto) => (
-                    <div
-                      key={produto.nome}
-                      className="flex items-center justify-between gap-4 text-sm"
-                    >
+                    <div key={produto.id} className="flex justify-between gap-4">
                       <span className="text-zinc-700">
                         {produto.quantidade}x {produto.nome}
                       </span>
-                      <span className="font-medium text-zinc-900">
-                        R$ {(produto.preco * produto.quantidade)
-                          .toFixed(2)
-                          .replace(".", ",")}
+                      <span className="font-semibold">
+                        R$ {moeda(produto.preco * produto.quantidade)}
                       </span>
                     </div>
                   ))}
                 </div>
 
                 <div className="my-4 border-t border-zinc-200" />
-
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between text-zinc-500">
                     <span>Subtotal</span>
-                    <span>R$ {valorTotal.toFixed(2).replace(".", ",")}</span>
+                    <span>R$ {moeda(valorTotal)}</span>
                   </div>
                   <div className="flex justify-between text-zinc-500">
                     <span>Taxa de entrega</span>
-                    <span>R$ {taxaAplicada.toFixed(2).replace(".", ",")}</span>
-                  </div>
-                  <div className="flex justify-between text-lg font-bold text-zinc-900">
-                    <span>Total</span>
                     <span>
-                      R$ {totalComEntrega.toFixed(2).replace(".", ",")}
+                      {tipoEntrega === "retirada"
+                        ? "Grátis"
+                        : bairro
+                        ? `R$ ${moeda(taxaAplicada)}`
+                        : "Selecione o bairro"}
                     </span>
                   </div>
+                  <div className="flex justify-between text-lg font-black text-zinc-900">
+                    <span>Total</span>
+                    <span>R$ {moeda(totalComEntrega)}</span>
+                  </div>
+                  <p className="pt-1 text-xs text-zinc-500">Estimativa: {tempoEntrega}</p>
                 </div>
-              </div>
+              </section>
 
               <button
+                type="button"
                 onClick={confirmarPedido}
-                className="w-full rounded-xl bg-red-600 py-3 font-bold text-white"
+                className="w-full rounded-xl bg-red-600 py-3.5 font-black text-white transition hover:bg-red-500"
               >
-                Confirmar pedido
+                Revisar e confirmar
               </button>
             </div>
           </div>
@@ -862,149 +876,123 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
       )}
 
       {pedidoConfirmado && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 text-black">
+        <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 sm:items-center sm:p-4">
+          <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-white p-5 text-zinc-900 shadow-2xl sm:rounded-3xl">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-2xl font-bold">Pedido confirmado</h2>
-                <p className="mt-1 text-sm text-zinc-500">
-                  Pedido #{numeroPedido}
-                </p>
+                <p className="text-sm font-bold text-emerald-600">Tudo certo ✓</p>
+                <h2 className="mt-1 text-2xl font-black">Confirmar pedido</h2>
+                <p className="mt-1 text-sm text-zinc-500">Pedido #{numeroPedido}</p>
               </div>
-
               <button
+                type="button"
                 onClick={() => setPedidoConfirmado(false)}
-                className="text-2xl"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-xl"
                 aria-label="Fechar confirmação"
               >
                 ✕
               </button>
             </div>
 
-            <div className="mt-6 space-y-2">
-              <p><strong>Nome:</strong> {nome}</p>
-              <p><strong>Telefone:</strong> {telefone}</p>
-              <p>
-                <strong>Tipo:</strong>{" "}
-                {tipoEntrega === "entrega" ? "Entrega" : "Retirada no local"}
+            <div className="mt-6 rounded-2xl bg-zinc-50 p-4 text-sm">
+              <p><strong>{nome}</strong> • {telefone}</p>
+              <p className="mt-2">
+                {tipoEntrega === "entrega"
+                  ? `${endereco}${complemento.trim() ? `, ${complemento}` : ""} — ${bairro}`
+                  : "Retirada no local"}
               </p>
-              {tipoEntrega === "entrega" && (
-                <>
-                  <p><strong>Endereço:</strong> {endereco}</p>
-                  <p><strong>Complemento:</strong> {complemento.trim() || "Nenhum"}</p>
-                  <p><strong>Bairro:</strong> {bairro}</p>
-                </>
+              <p className="mt-2">Pagamento: <strong>{pagamento}</strong></p>
+              {pagamento === "Dinheiro" && trocoPara.trim() && (
+                <p className="mt-1">Troco para: R$ {trocoPara}</p>
               )}
-              <p><strong>Pagamento:</strong> {pagamento}</p>
-              {pagamento === "Dinheiro" && (
-                <p><strong>Troco para:</strong> {trocoPara.trim() || "Não informado"}</p>
-              )}
-              <p><strong>Tempo estimado:</strong> {tempoEntrega}</p>
-              <p>
-                <strong>Observações:</strong>{" "}
-                {observacao.trim() || "Nenhuma"}
-              </p>
             </div>
 
-            <div className="mt-6 border-t border-zinc-200 pt-4">
-              <h3 className="font-bold">Itens</h3>
-              <div className="mt-3 space-y-2">
-                {carrinho.map((produto) => (
-                  <div key={produto.nome} className="flex justify-between gap-4">
-                    <span>
+            <div className="mt-5 space-y-4">
+              {carrinho.map((produto) => (
+                <div key={produto.id} className="border-b border-zinc-100 pb-4">
+                  <div className="flex justify-between gap-4">
+                    <span className="font-semibold">
                       {produto.quantidade}x {produto.nome}
                     </span>
-                    <span>
-                      R$ {(produto.preco * produto.quantidade)
-                        .toFixed(2)
-                        .replace(".", ",")}
+                    <span className="font-bold">
+                      R$ {moeda(produto.preco * produto.quantidade)}
                     </span>
                   </div>
-                ))}
-              </div>
+                  {produto.observacao && (
+                    <p className="mt-1 text-sm text-zinc-500">Obs.: {produto.observacao}</p>
+                  )}
+                </div>
+              ))}
             </div>
 
-            <div className="mt-5 space-y-2 border-t border-zinc-200 pt-4">
-              <div className="flex justify-between text-sm text-zinc-600">
+            <div className="mt-5 space-y-2">
+              <div className="flex justify-between text-sm text-zinc-500">
                 <span>Subtotal</span>
-                <span>R$ {valorTotal.toFixed(2).replace(".", ",")}</span>
+                <span>R$ {moeda(valorTotal)}</span>
               </div>
-              <div className="flex justify-between text-sm text-zinc-600">
+              <div className="flex justify-between text-sm text-zinc-500">
                 <span>Taxa de entrega</span>
-                <span>R$ {taxaAplicada.toFixed(2).replace(".", ",")}</span>
+                <span>R$ {moeda(taxaAplicada)}</span>
               </div>
-              <div className="flex justify-between text-xl font-bold">
+              <div className="flex justify-between text-xl font-black">
                 <span>Total</span>
-                <span>R$ {totalComEntrega.toFixed(2).replace(".", ",")}</span>
+                <span>R$ {moeda(totalComEntrega)}</span>
               </div>
             </div>
 
             <button
+              type="button"
               onClick={enviarWhatsApp}
-              className="mt-6 w-full rounded-xl bg-green-600 py-3 font-bold text-white"
+              className="mt-6 w-full rounded-xl bg-green-600 py-3.5 font-black text-white transition hover:bg-green-500"
             >
-              Enviar pedido pelo WhatsApp
+              Enviar pedido no WhatsApp
             </button>
+            <p className="mt-2 text-center text-xs text-zinc-500">
+              O WhatsApp abrirá com o pedido completo pronto para enviar.
+            </p>
           </div>
         </div>
       )}
+
       <a
-  href="https://wa.me/5551994154447"
-  target="_blank"
-  rel="noopener noreferrer"
-  className={`fixed right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-green-600 text-2xl shadow-xl transition hover:scale-110 hover:bg-green-500 ${
-    quantidadeTotal > 0 ? "bottom-24 md:bottom-5" : "bottom-5"
-  }`}
-  aria-label="Falar com a Delivery Yeshua pelo WhatsApp"
-  title="Fale conosco pelo WhatsApp"
->
-  💬
-</a>
+        href={`https://wa.me/${TELEFONE_LOJA}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`fixed right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-green-600 text-2xl shadow-xl transition hover:scale-105 hover:bg-green-500 ${
+          quantidadeTotal > 0 ? "bottom-24 md:bottom-5" : "bottom-5"
+        }`}
+        aria-label="Falar com a Delivery Yeshua pelo WhatsApp"
+        title="Fale conosco pelo WhatsApp"
+      >
+        💬
+      </a>
+
       <footer className="mt-14 border-t border-zinc-200 bg-white px-6 py-10">
-  <div className="mx-auto max-w-6xl">
-    <div className="grid gap-8 md:grid-cols-3">
-
-      <div>
-        <h3 className="text-xl font-black text-zinc-900">
-          Delivery Yeshua
-        </h3>
-
-        <p className="mt-2 text-sm text-zinc-500">
-          Seu lanche favorito, direto até você.
-        </p>
-      </div>
-
-      <div>
-        <h4 className="font-bold text-zinc-900">
-          Horário
-        </h4>
-
-        <p className="mt-2 text-sm text-zinc-500">
-          Todos os dias
-        </p>
-
-        <p className="text-sm text-zinc-500">
-          19:00 às 01:00
-        </p>
-      </div>
-
-      <div>
-        <h4 className="font-bold text-zinc-900">
-          Formas de pagamento
-        </h4>
-
-        <p className="mt-2 text-sm text-zinc-500">
-          Pix • Dinheiro • Cartão na entrega
-        </p>
-      </div>
-
-    </div>
-
-    <div className="mt-8 border-t border-zinc-200 pt-6 text-center text-sm text-zinc-500">
-      © 2026 Delivery Yeshua. Todos os direitos reservados.
-    </div>
-  </div>
-</footer>
+        <div className="mx-auto max-w-6xl">
+          <div className="grid gap-8 md:grid-cols-3">
+            <div>
+              <h3 className="text-xl font-black text-zinc-900">Delivery Yeshua</h3>
+              <p className="mt-2 text-sm text-zinc-500">
+                Seu lanche favorito, direto até você.
+              </p>
+            </div>
+            <div>
+              <h4 className="font-bold text-zinc-900">Horário</h4>
+              <p className="mt-2 text-sm text-zinc-500">Todos os dias</p>
+              <p className="text-sm text-zinc-500">19:00 às 01:00</p>
+            </div>
+            <div>
+              <h4 className="font-bold text-zinc-900">Formas de pagamento</h4>
+              <p className="mt-2 text-sm text-zinc-500">
+                Pix • Dinheiro • Cartão na entrega
+              </p>
+            </div>
+          </div>
+          <div className="mt-8 border-t border-zinc-200 pt-6 text-center text-sm text-zinc-500">
+            © 2026 Delivery Yeshua. Todos os direitos reservados.
+          </div>
+        </div>
+      </footer>
     </main>
   );
 }

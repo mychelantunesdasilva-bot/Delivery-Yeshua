@@ -20,16 +20,6 @@ export const metadata: Metadata = {
   description:
     "Peça seus lanches, combos, porções, bebidas e ala-minutas na Delivery Yeshua.",
   applicationName: "Delivery Yeshua",
-  keywords: [
-    "Delivery Yeshua",
-    "delivery",
-    "lanches",
-    "xis",
-    "hambúrguer",
-    "combos",
-    "porções",
-    "ala-minutas",
-  ],
   robots: {
     index: true,
     follow: true,
@@ -46,9 +36,7 @@ export default function RootLayout({
       lang="pt-BR"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="flex min-h-full flex-col bg-zinc-950">
-        {children}
-      </body>
+      <body className="min-h-full bg-[#f7f7f7] text-zinc-900">{children}</body>
     </html>
   );
 }

@@ -45,8 +45,12 @@ button {
   cursor: pointer;
 }
 
+button:disabled {
+  cursor: not-allowed;
+}
+
 ::selection {
-  background: #ea1d2c;
+  background: #e11d2e;
   color: #ffffff;
 }
 
