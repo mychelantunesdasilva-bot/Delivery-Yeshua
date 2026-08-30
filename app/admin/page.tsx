@@ -18,7 +18,7 @@ export default function AdminPage() {
 
     try {
       await signInWithEmailAndPassword(auth, email, senha);
-      alert("Login realizado com sucesso!");
+      window.location.href = "/admin/painel";
     } catch (error: unknown) {
       console.error(error);
 

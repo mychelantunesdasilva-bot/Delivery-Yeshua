@@ -1,257 +1,30 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { collection, onSnapshot } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import Header from "@/Components/Header";
 import ProductCard from "@/Components/ProductCard";
 
-type Produto = {
+type ProdutoCarrinho = {
   nome: string;
   preco: number;
   quantidade: number;
-
 };
 
-const produtos = [
-  // LANCHES
-  {
-    nome: "Batata Frita Pequena",
-    descricao: "Batata frita crocante e sequinha, feita na hora!",
-    preco: 29.99,
-    categoria: "Porções",
-    imagem: "/produtos/batata-pequena.jpg",
-  },
-  {
-    nome: "Batata Frita Grande",
-    descricao: "Batata frita crocante e sequinha, feita na hora!",
-    preco: 56.99,
-    categoria: "Porções",
-    imagem: "/produtos/batata-grande.jpg",
-  },
-  {
-    nome: "Batata Frita Média",
-    descricao: "Batata frita crocante e sequinha, feita na hora!",
-    preco: 39.99,
-    categoria: "Porções",
-    imagem: "/produtos/batata-media.jpg",
-  },
-  {
-    nome: "X Calabresa",
-    descricao: "Pão macio, calabresa bem temperada, queijo derretido, tomate e alface.",
-    preco: 24.99,
-    categoria: "Lanches",
-    imagem: "/produtos/x-calabresa.jpg",
-  },
-  {
-    nome: "X Frango",
-    descricao: "Frango bem temperado, queijo derretido, tomate, alface e molho especial.",
-    preco: 24.99,
-    categoria: "Lanches",
-    imagem: "/produtos/x-frango.jpg",
-  },
-  {
-    nome: "Maionese Caseira",
-    descricao: "Maionese caseira da casa.",
-    preco: 5,
-    categoria: "Lanches",
-    imagem: "/produtos/maionese.jpg",
-  },
-  {
-    nome: "X Intreveiro",
-    descricao: "Hambúrguer suculento, queijo derretido e muito sabor.",
-    preco: 35.99,
-    categoria: "Lanches",
-    imagem: "/produtos/x-intreveiro.jpg",
-  },
-  {
-    nome: "X Bacon",
-    descricao: "Hambúrguer suculento, queijo derretido e muito bacon.",
-    preco: 29.99,
-    categoria: "Lanches",
-    imagem: "/produtos/x-bacon.jpg",
-  },
-  {
-    nome: "X Coração",
-    descricao: "Lanche de coração de frango cheio de sabor.",
-    preco: 29.99,
-    categoria: "Lanches",
-    imagem: "/produtos/x-coracao.jpg",
-  },
-  {
-    nome: "X Tudo",
-    descricao: "O lanche que mata a fome de verdade!",
-    preco: 39.99,
-    categoria: "Lanches",
-    imagem: "/produtos/x-tudo.jpg",
-  },
-  {
-    nome: "X Vegetariano",
-    descricao: "Leve no nome, mas cheio de sabor.",
-    preco: 20.99,
-    categoria: "Lanches",
-    imagem: "/produtos/x-vegetariano.jpg",
-  },
-  {
-    nome: "X Acebolado",
-    descricao: "Hambúrguer suculento, queijo derretido e muita cebola.",
-    preco: 23.99,
-    categoria: "Lanches",
-    imagem: "/produtos/x-acebolado.jpg",
-  },
-  {
-    nome: "Combo Solteiro",
-    descricao: "X-Salada acompanhado de bebida.",
-    preco: 46.99,
-    categoria: "Combos",
-    imagem: "/produtos/combo-solteiro.jpg",
-  },
-  {
-    nome: "Combo Casal",
-    descricao: "Combo perfeito para compartilhar.",
-    preco: 69.99,
-    categoria: "Combos",
-    imagem: "/produtos/combo-casal.jpg",
-  },
-  {
-    nome: "Combo Casal - 2 X-Salada",
-    descricao: "Dois X-Saladas acompanhados de porção e bebida.",
-    preco: 69.99,
-    categoria: "Combos",
-    imagem: "/produtos/combo-casal-salada.jpg",
-  },
-  {
-    nome: "Combo Triângulo Delicioso",
-    descricao: "3 burgers, bebida e porção.",
-    preco: 89.99,
-    categoria: "Combos",
-    imagem: "/produtos/combo-triangulo.jpg",
-  },
-  {
-    nome: "Xis Salada",
-    descricao: "Xis com maionese, alface, milho, ervilha e tomate.",
-    preco: 21.99,
-    categoria: "Lanches",
-    imagem: "/produtos/x-salada.jpg",
-  },
-
-  // BEBIDAS
-  {
-    nome: "Coca-Cola 2L",
-    descricao: "Garrafa 2 litros.",
-    preco: 15,
-    categoria: "Bebidas",
-    imagem: "/produtos/coca-2l.jpg",
-  },
-  {
-    nome: "Coca-Cola 350ml",
-    descricao: "Lata 350ml.",
-    preco: 7,
-    categoria: "Bebidas",
-    imagem: "/produtos/coca-350.jpg",
-  },
-  {
-    nome: "Pepsi 350ml",
-    descricao: "Lata 350ml.",
-    preco: 7,
-    categoria: "Bebidas",
-    imagem: "/produtos/pepsi-350.jpg",
-  },
-  {
-    nome: "Guaraná Antarctica 350ml",
-    descricao: "Lata 350ml.",
-    preco: 7,
-    categoria: "Bebidas",
-    imagem: "/produtos/guarana-350.jpg",
-  },
-  {
-    nome: "Pepsi Black 350ml",
-    descricao: "Lata 350ml.",
-    preco: 7,
-    categoria: "Bebidas",
-    imagem: "/produtos/pepsi-black.jpg",
-  },
-  {
-    nome: "Charrua Guaraná 2L",
-    descricao: "Garrafa 2 litros.",
-    preco: 14,
-    categoria: "Bebidas",
-    imagem: "/produtos/charrua-2l.jpg",
-  },
-  {
-    nome: "Pepsi 2 Litros",
-    descricao: "Garrafa 2 litros.",
-    preco: 14,
-    categoria: "Bebidas",
-    imagem: "/produtos/pepsi-2l.jpg",
-  },
-  {
-    nome: "Sprite Original 2L",
-    descricao: "Garrafa 2 litros.",
-    preco: 14,
-    categoria: "Bebidas",
-    imagem: "/produtos/sprite-2l.jpg",
-  },
-
-  // ALA-MINUTAS
-  {
-    nome: "Ala-Minuta de Filé de Frango Grelhado na Chapa",
-    descricao: "Filé de frango suculento e bem grelhado na chapa.",
-    preco: 26.99,
-    categoria: "Ala-Minutas",
-    imagem: "/produtos/ala-frango-grelhado.jpg",
-  },
-  {
-    nome: "Ala-Minuta de Bife Bovino Acebolado",
-    descricao: "Bife bovino macio e saboroso acompanhado de cebola.",
-    preco: 32.99,
-    categoria: "Ala-Minutas",
-    imagem: "/produtos/ala-bife-acebolado.jpg",
-  },
-  {
-    nome: "Ala-Minuta de Bife Bovino Crocante à Milanesa",
-    descricao: "Bife empanado e frito até ficar dourado e crocante.",
-    preco: 32.99,
-    categoria: "Ala-Minutas",
-    imagem: "/produtos/ala-bife-milanesa.jpg",
-  },
-  {
-    nome: "Ala-Minuta de Bife Bovino Grelhado na Chapa",
-    descricao: "Bife bovino grelhado na chapa, macio e suculento.",
-    preco: 28.99,
-    categoria: "Ala-Minutas",
-    imagem: "/produtos/ala-bife-grelhado.jpg",
-  },
-  {
-    nome: "Ala-Minuta de Filé de Frango Acebolado",
-    descricao: "Filé de frango grelhado coberto com cebola.",
-    preco: 30.99,
-    categoria: "Ala-Minutas",
-    imagem: "/produtos/ala-frango-acebolado.jpg",
-  },
-  {
-    nome: "Ala-Minuta de Filé de Frango Crocante à Milanesa",
-    descricao: "Filé de frango empanado com casquinha dourada e crocante.",
-    preco: 30.99,
-    categoria: "Ala-Minutas",
-    imagem: "/produtos/ala-frango-milanesa.jpg",
-  },
-  {
-    nome: "Ala-Minuta de Bife Bovino à Parmegiana",
-    descricao: "Bife empanado coberto com molho e queijo.",
-    preco: 34.99,
-    categoria: "Ala-Minutas",
-    imagem: "/produtos/ala-bife-parmegiana.jpg",
-  },
-  {
-    nome: "Ala-Minuta de Filé de Frango à Parmegiana",
-    descricao: "Filé de frango empanado coberto com molho e queijo.",
-    preco: 34.99,
-    categoria: "Ala-Minutas",
-    imagem: "/produtos/ala-frango-parmegiana.jpg",
-  },
-];
+type ProdutoCardapio = {
+  id: string;
+  nome: string;
+  descricao: string;
+  preco: number;
+  categoria: string;
+  imagem: string;
+  ativo: boolean;
+};
 
 export default function Home() {
-  const [carrinho, setCarrinho] = useState<Produto[]>([]);
+  const [produtos, setProdutos] = useState<ProdutoCardapio[]>([]);
+  const [carrinho, setCarrinho] = useState<ProdutoCarrinho[]>([]);
   const [carrinhoAberto, setCarrinhoAberto] = useState(false);
   const [checkoutAberto, setCheckoutAberto] = useState(false);
   const [pedidoConfirmado, setPedidoConfirmado] = useState(false);
@@ -266,6 +39,31 @@ export default function Home() {
   const [bairro, setBairro] = useState("");
   const [taxaEntrega, setTaxaEntrega] = useState(0);
   const [lojaAberta, setLojaAberta] = useState(false);
+
+  useEffect(() => {
+    const cancelar = onSnapshot(
+      collection(db, "produtos"),
+      (snapshot) => {
+        const lista = snapshot.docs
+  .map((documento) => {
+    const dados = documento.data() as Omit<ProdutoCardapio, "id">;
+
+    return {
+      id: documento.id,
+      ...dados,
+    };
+  })
+  .filter((produto) => produto.ativo !== false);
+
+        setProdutos(lista);
+      },
+      (error) => {
+        console.error("Erro ao carregar o cardápio:", error);
+      }
+    );
+
+    return () => cancelar();
+  }, []);
 
   useEffect(() => {
     function atualizarStatusLoja() {
