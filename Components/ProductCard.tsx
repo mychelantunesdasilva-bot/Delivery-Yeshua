@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 type ProductCardProps = {
   nome: string;
+  descricao?: string;
   preco: string;
   imagem: string;
   esgotado?: boolean;
@@ -13,6 +14,7 @@ type ProductCardProps = {
 
 export default function ProductCard({
   nome,
+  descricao: _descricao,
   preco,
   imagem,
   esgotado = false,
