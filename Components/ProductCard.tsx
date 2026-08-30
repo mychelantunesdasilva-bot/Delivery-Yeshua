@@ -16,49 +16,43 @@ export default function ProductCard({
   adicionarAoCarrinho,
 }: ProductCardProps) {
   return (
-    <article className="group flex h-full w-full flex-col overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900 shadow-lg transition duration-300 hover:-translate-y-1 hover:border-zinc-700 hover:shadow-2xl">
-      <div className="relative h-52 w-full overflow-hidden bg-zinc-800">
-        <Image
-          src={imagem}
-          alt={nome}
-          fill
-          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-          className="object-cover transition duration-500 group-hover:scale-105"
-        />
-
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-zinc-900 to-transparent" />
-      </div>
-
-      <div className="flex flex-1 flex-col p-5">
-        <h2 className="text-xl font-black leading-tight text-white sm:text-2xl">
+    <article className="group flex min-h-[154px] w-full overflow-hidden rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition hover:border-zinc-300 hover:shadow-md">
+      <div className="flex min-w-0 flex-1 flex-col pr-4">
+        <h3 className="line-clamp-2 text-base font-bold leading-snug text-zinc-900 sm:text-lg">
           {nome}
-        </h2>
+        </h3>
 
-        <p className="mt-2 line-clamp-3 text-sm leading-6 text-zinc-400">
+        <p className="mt-1 line-clamp-2 text-sm leading-5 text-zinc-500">
           {descricao}
         </p>
 
-        <div className="mt-auto flex items-end justify-between gap-4 pt-6">
+        <div className="mt-auto flex items-end justify-between gap-3 pt-4">
           <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-              A partir de
-            </p>
-
-            <span className="text-2xl font-black text-amber-400">
+            <p className="text-xs text-zinc-500">a partir de</p>
+            <p className="text-lg font-extrabold text-zinc-900">
               R$ {preco}
-            </span>
+            </p>
           </div>
 
           <button
             type="button"
             onClick={adicionarAoCarrinho}
-            className="flex h-12 items-center gap-2 rounded-full bg-amber-500 px-5 font-black text-black shadow-lg transition hover:bg-amber-400 active:scale-95"
+            className="flex h-10 min-w-10 items-center justify-center rounded-full border border-red-200 bg-white px-3 font-black text-red-600 transition hover:bg-red-50 active:scale-95"
             aria-label={`Adicionar ${nome} ao carrinho`}
           >
-            <span className="text-xl">+</span>
-            <span className="hidden sm:inline">Adicionar</span>
+            +
           </button>
         </div>
+      </div>
+
+      <div className="relative h-28 w-28 shrink-0 overflow-hidden rounded-xl bg-zinc-100 sm:h-32 sm:w-32">
+        <Image
+          src={imagem}
+          alt={nome}
+          fill
+          sizes="(max-width: 640px) 112px, 128px"
+          className="object-cover transition duration-300 group-hover:scale-105"
+        />
       </div>
     </article>
   );

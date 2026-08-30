@@ -332,51 +332,62 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
   }
 
   return (
-    <main className="min-h-screen bg-zinc-950 pb-24 text-white">
+    <main className="min-h-screen bg-[#f7f7f7] pb-24 text-zinc-900">
       <Header
         quantidadeCarrinho={quantidadeTotal}
         abrirCarrinho={() => setCarrinhoAberto(true)}
       />
 
-      <section className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">
-        <div className="rounded-3xl bg-gradient-to-r from-amber-500 to-orange-600 p-6 text-black shadow-xl sm:p-8">
-          <h2 className="text-4xl font-black">Delivery Yeshua</h2>
-          <p className="mt-2 text-lg font-medium">
-            Seu lanche favorito, do nosso jeito, direto até você.
-          </p>
-        </div>
+      <section className="mx-auto max-w-6xl px-4 py-5 sm:px-6 lg:px-8">
+        <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
+          <div className="h-24 bg-gradient-to-r from-red-600 via-red-500 to-orange-400 sm:h-32" />
 
-        <div
-          className={`mt-4 rounded-2xl border p-4 ${
-            lojaAberta
-              ? "border-green-500/30 bg-green-500/10"
-              : "border-red-500/30 bg-red-500/10"
-          }`}
-        >
-          <div className="flex items-center gap-3">
-            <span
-              className={`h-3 w-3 rounded-full ${
-                lojaAberta ? "bg-green-500" : "bg-red-500"
-              }`}
-            />
-            <div>
-              <p
-                className={`font-bold ${
-                  lojaAberta ? "text-green-400" : "text-red-400"
+          <div className="relative px-5 pb-5 sm:px-6">
+            <div className="-mt-10 flex items-end justify-between gap-4">
+              <div className="flex items-end gap-4">
+                <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl border-4 border-white bg-white shadow-md">
+                  <img
+                    src="/produtos/DELIVERY.png"
+                    alt="Delivery Yeshua"
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+
+                <div className="pb-1">
+                  <h2 className="text-2xl font-black text-zinc-900 sm:text-3xl">
+                    Delivery Yeshua
+                  </h2>
+                  <p className="text-sm text-zinc-500">Lanches • Combos • Porções</p>
+                </div>
+              </div>
+
+              <span
+                className={`mb-1 rounded-full px-3 py-1 text-xs font-bold ${
+                  lojaAberta
+                    ? "bg-emerald-50 text-emerald-700"
+                    : "bg-red-50 text-red-600"
                 }`}
               >
-                {lojaAberta ? "Aberto agora" : "Fechado agora"}
-              </p>
-              <p className="text-sm text-zinc-400">
-                Todos os dias • 19:00 às 01:00
-              </p>
+                {lojaAberta ? "Aberto" : "Fechado"}
+              </span>
+            </div>
+
+            <div className="mt-5 grid grid-cols-3 divide-x divide-zinc-200 rounded-xl border border-zinc-200 bg-zinc-50 py-3 text-center">
+              <div>
+                <p className="text-xs text-zinc-500">Entrega</p>
+                <p className="mt-1 text-sm font-bold text-zinc-900">40–60 min</p>
+              </div>
+              <div>
+                <p className="text-xs text-zinc-500">Pedido mínimo</p>
+                <p className="mt-1 text-sm font-bold text-zinc-900">Sem mínimo</p>
+              </div>
+              <div>
+                <p className="text-xs text-zinc-500">Horário</p>
+                <p className="mt-1 text-sm font-bold text-zinc-900">19h–01h</p>
+              </div>
             </div>
           </div>
         </div>
-
-        <p className="mt-4 text-lg text-zinc-400">
-          O sabor que chega até você.
-        </p>
 
         <div className="mt-6">
           <input
@@ -384,7 +395,7 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
             placeholder="🔎 Buscar no cardápio..."
             value={busca}
             onChange={(event) => setBusca(event.target.value)}
-            className="w-full rounded-2xl border border-zinc-700 bg-zinc-900 px-5 py-4 text-white outline-none placeholder:text-zinc-500 focus:border-amber-500"
+            className="w-full rounded-xl border border-zinc-200 bg-white px-5 py-4 text-zinc-900 shadow-sm outline-none placeholder:text-zinc-500 focus:border-red-500 focus:ring-2 focus:ring-red-500/10"
           />
         </div>
 
@@ -393,25 +404,25 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
             {Array.from({ length: 6 }).map((_, index) => (
               <div
                 key={index}
-                className="h-80 animate-pulse rounded-2xl border border-zinc-800 bg-zinc-900"
+                className="h-44 animate-pulse rounded-2xl border border-zinc-200 bg-white"
               />
             ))}
           </div>
         )}
 
         {!carregandoProdutos && erroProdutos && (
-          <div className="mt-10 rounded-2xl border border-red-500/30 bg-red-500/10 p-5 text-red-300">
+          <div className="mt-10 rounded-2xl border border-red-200 bg-red-50 p-5 text-red-700">
             {erroProdutos}
           </div>
         )}
 
         {!carregandoProdutos && !erroProdutos && !busca.trim() && produtosDestaque.length > 0 && (
           <div className="mt-10">
-            <h2 className="border-l-4 border-amber-500 pl-3 text-3xl font-black text-white">
+            <h2 className="text-2xl font-black text-zinc-900">
               ⭐ Mais pedidos
             </h2>
 
-            <div className="mt-5 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
               {produtosDestaque.map((produto) => (
                 <ProductCard
                   key={`destaque-${produto.nome}`}
@@ -428,7 +439,7 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
           </div>
         )}
 
-        <div className="sticky top-[72px] z-30 -mx-4 mt-8 border-y border-zinc-800 bg-zinc-950/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+        <div className="sticky top-[76px] z-30 -mx-4 mt-7 border-y border-zinc-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
           <div className="flex gap-3 overflow-x-auto pb-1">
             {categorias.map((categoria, index) => (
               <button
@@ -441,8 +452,8 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
                 }
                 className={`shrink-0 rounded-full px-5 py-2 font-bold transition ${
                   index === 0
-                    ? "bg-amber-500 text-black hover:bg-amber-400"
-                    : "bg-zinc-800 text-white hover:bg-zinc-700"
+                    ? "bg-red-600 text-white hover:bg-red-500"
+                    : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
                 }`}
               >
                 {categoria}
@@ -452,7 +463,7 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
         </div>
 
         {produtosFiltrados.length === 0 && (
-          <div className="mt-10 rounded-2xl border border-zinc-800 bg-zinc-900 p-6 text-center text-zinc-400">
+          <div className="mt-10 rounded-2xl border border-zinc-200 bg-white p-6 text-center text-zinc-500">
             Nenhum produto encontrado para “{busca}”.
           </div>
         )}
@@ -468,13 +479,13 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
             <div
               key={categoria}
               id={categoria}
-              className="mt-10 scroll-mt-40"
+              className="mt-8 scroll-mt-40"
             >
-              <h2 className="border-l-4 border-amber-500 pl-3 text-3xl font-black text-white">
+              <h2 className="text-2xl font-black text-zinc-900">
                 {categoria}
               </h2>
 
-              <div className="mt-5 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
                 {produtosDaCategoria.map((produto) => (
                   <ProductCard
                     key={produto.nome}
@@ -498,12 +509,12 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
         <div
           role="status"
           aria-live="polite"
-          className="fixed left-1/2 top-24 z-[60] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-2xl border border-green-500/30 bg-zinc-900 px-4 py-3 shadow-2xl"
+          className="fixed left-1/2 top-24 z-[60] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-zinc-900 shadow-2xl"
         >
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="font-bold text-green-400">✓ Adicionado!</p>
-              <p className="truncate text-sm text-zinc-300">{avisoCarrinho}</p>
+              <p className="font-bold text-emerald-600">✓ Adicionado!</p>
+              <p className="truncate text-sm text-zinc-500">{avisoCarrinho}</p>
             </div>
             <button
               type="button"
@@ -511,7 +522,7 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
                 setCarrinhoAberto(true);
                 setAvisoCarrinho("");
               }}
-              className="shrink-0 rounded-xl bg-amber-500 px-3 py-2 text-sm font-black text-black transition hover:bg-amber-400"
+              className="shrink-0 rounded-xl bg-red-600 px-3 py-2 text-sm font-black text-white transition hover:bg-red-500"
             >
               Ver carrinho
             </button>
@@ -520,11 +531,11 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
       )}
 
       {quantidadeTotal > 0 && !carrinhoAberto && !checkoutAberto && !pedidoConfirmado && (
-        <div className="fixed inset-x-0 bottom-0 z-50 border-t border-zinc-700 bg-zinc-900/95 p-3 shadow-2xl backdrop-blur md:hidden">
+        <div className="fixed inset-x-0 bottom-0 z-50 border-t border-zinc-200 bg-white/95 p-3 shadow-2xl backdrop-blur md:hidden">
           <button
             type="button"
             onClick={() => setCarrinhoAberto(true)}
-            className="mx-auto flex w-full max-w-lg items-center justify-between gap-4 rounded-2xl bg-amber-500 px-5 py-3.5 text-left text-black shadow-lg transition active:scale-[0.99]"
+            className="mx-auto flex w-full max-w-lg items-center justify-between gap-4 rounded-xl bg-red-600 px-5 py-3.5 text-left text-white shadow-lg transition active:scale-[0.99]"
           >
             <div>
               <p className="text-sm font-black">
@@ -596,7 +607,7 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
                             onClick={() =>
                               adicionarAoCarrinho(produto.nome, produto.preco)
                             }
-                            className="h-8 w-8 rounded-full bg-black font-bold text-white"
+                            className="h-8 w-8 rounded-full bg-black font-bold text-zinc-900"
                           >
                             +
                           </button>
@@ -622,7 +633,7 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
                     setCarrinhoAberto(false);
                     setCheckoutAberto(true);
                   }}
-                  className="mt-6 w-full rounded-xl bg-black py-3 font-bold text-white"
+                  className="mt-6 w-full rounded-xl bg-red-600 py-3 font-bold text-white"
                 >
                   Finalizar pedido
                 </button>
@@ -654,7 +665,7 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
                   placeholder="Digite seu nome"
                   value={nome}
                   onChange={(event) => setNome(event.target.value)}
-                  className="w-full rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-amber-500"
+                  className="w-full rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-red-500"
                 />
               </div>
 
@@ -665,7 +676,7 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
                   placeholder="(00) 00000-0000"
                   value={telefone}
                   onChange={(event) => setTelefone(event.target.value)}
-                  className="w-full rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-amber-500"
+                  className="w-full rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-red-500"
                 />
               </div>
 
@@ -678,7 +689,7 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
                     onClick={() => setTipoEntrega("entrega")}
                     className={`rounded-xl border px-4 py-3 font-bold ${
                       tipoEntrega === "entrega"
-                        ? "border-amber-500 bg-amber-500 text-black"
+                        ? "border-red-600 bg-red-600 text-black"
                         : "border-zinc-300 bg-white text-black"
                     }`}
                   >
@@ -693,7 +704,7 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
                     }}
                     className={`rounded-xl border px-4 py-3 font-bold ${
                       tipoEntrega === "retirada"
-                        ? "border-amber-500 bg-amber-500 text-black"
+                        ? "border-red-600 bg-red-600 text-black"
                         : "border-zinc-300 bg-white text-black"
                     }`}
                   >
@@ -711,7 +722,7 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
                   placeholder="Rua e número"
                   value={endereco}
                   onChange={(event) => setEndereco(event.target.value)}
-                  className="w-full rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-amber-500"
+                  className="w-full rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-red-500"
                 />
               </div>
 
@@ -720,7 +731,7 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
                 <select
                   value={bairro}
                   onChange={(event) => selecionarBairro(event.target.value)}
-                  className="w-full rounded-xl border border-zinc-300 px-4 py-3 text-black outline-none focus:border-amber-500"
+                  className="w-full rounded-xl border border-zinc-300 px-4 py-3 text-black outline-none focus:border-red-500"
                 >
                   <option value="">Selecione seu bairro</option>
                   <option value="Guajuviras">Guajuviras — R$ 5,00</option>
@@ -738,17 +749,17 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
                   placeholder="Apto, bloco, referência..."
                   value={complemento}
                   onChange={(event) => setComplemento(event.target.value)}
-                  className="w-full rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-amber-500"
+                  className="w-full rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-red-500"
                 />
               </div>
                 </>
               )}
 
-              <div className="rounded-xl border border-zinc-700 bg-zinc-900 p-4">
-                <p className="font-medium text-white">
+              <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+                <p className="font-medium text-zinc-900">
                   🛵 Tempo estimado de entrega
                 </p>
-                <p className="mt-1 text-sm text-zinc-400">{tempoEntrega}</p>
+                <p className="mt-1 text-sm text-zinc-500">{tempoEntrega}</p>
               </div>
 
               <div>
@@ -760,7 +771,7 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
                   value={observacao}
                   onChange={(event) => setObservacao(event.target.value)}
                   maxLength={300}
-                  className="min-h-24 w-full resize-none rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-amber-500"
+                  className="min-h-24 w-full resize-none rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-red-500"
                 />
                 <p className="mt-1 text-right text-xs text-zinc-500">
                   {observacao.length}/300
@@ -774,7 +785,7 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
                 <select
                   value={pagamento}
                   onChange={(event) => setPagamento(event.target.value)}
-                  className="w-full rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-amber-500"
+                  className="w-full rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-red-500"
                 >
                   <option value="Pix">Pix</option>
                   <option value="Dinheiro">Dinheiro</option>
@@ -791,13 +802,13 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
                     placeholder="Ex: 100,00"
                     value={trocoPara}
                     onChange={(event) => setTrocoPara(event.target.value)}
-                    className="w-full rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-amber-500"
+                    className="w-full rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-red-500"
                   />
                 </div>
               )}
 
-              <div className="rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
-                <h3 className="text-lg font-bold text-white">
+              <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-5">
+                <h3 className="text-lg font-bold text-zinc-900">
                   Resumo do pedido
                 </h3>
 
@@ -807,10 +818,10 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
                       key={produto.nome}
                       className="flex items-center justify-between gap-4 text-sm"
                     >
-                      <span className="text-zinc-300">
+                      <span className="text-zinc-700">
                         {produto.quantidade}x {produto.nome}
                       </span>
-                      <span className="font-medium text-white">
+                      <span className="font-medium text-zinc-900">
                         R$ {(produto.preco * produto.quantidade)
                           .toFixed(2)
                           .replace(".", ",")}
@@ -819,18 +830,18 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
                   ))}
                 </div>
 
-                <div className="my-4 border-t border-zinc-700" />
+                <div className="my-4 border-t border-zinc-200" />
 
                 <div className="space-y-2 text-sm">
-                  <div className="flex justify-between text-zinc-400">
+                  <div className="flex justify-between text-zinc-500">
                     <span>Subtotal</span>
                     <span>R$ {valorTotal.toFixed(2).replace(".", ",")}</span>
                   </div>
-                  <div className="flex justify-between text-zinc-400">
+                  <div className="flex justify-between text-zinc-500">
                     <span>Taxa de entrega</span>
                     <span>R$ {taxaAplicada.toFixed(2).replace(".", ",")}</span>
                   </div>
-                  <div className="flex justify-between text-lg font-bold text-white">
+                  <div className="flex justify-between text-lg font-bold text-zinc-900">
                     <span>Total</span>
                     <span>
                       R$ {totalComEntrega.toFixed(2).replace(".", ",")}
@@ -841,7 +852,7 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
 
               <button
                 onClick={confirmarPedido}
-                className="w-full rounded-xl bg-black py-3 font-bold text-white"
+                className="w-full rounded-xl bg-red-600 py-3 font-bold text-white"
               >
                 Confirmar pedido
               </button>
@@ -949,47 +960,47 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
 >
   💬
 </a>
-      <footer className="mt-16 border-t border-zinc-800 bg-zinc-950 px-6 py-10">
+      <footer className="mt-14 border-t border-zinc-200 bg-white px-6 py-10">
   <div className="mx-auto max-w-6xl">
     <div className="grid gap-8 md:grid-cols-3">
 
       <div>
-        <h3 className="text-xl font-black text-white">
+        <h3 className="text-xl font-black text-zinc-900">
           Delivery Yeshua
         </h3>
 
-        <p className="mt-2 text-sm text-zinc-400">
+        <p className="mt-2 text-sm text-zinc-500">
           Seu lanche favorito, direto até você.
         </p>
       </div>
 
       <div>
-        <h4 className="font-bold text-white">
+        <h4 className="font-bold text-zinc-900">
           Horário
         </h4>
 
-        <p className="mt-2 text-sm text-zinc-400">
+        <p className="mt-2 text-sm text-zinc-500">
           Todos os dias
         </p>
 
-        <p className="text-sm text-zinc-400">
+        <p className="text-sm text-zinc-500">
           19:00 às 01:00
         </p>
       </div>
 
       <div>
-        <h4 className="font-bold text-white">
+        <h4 className="font-bold text-zinc-900">
           Formas de pagamento
         </h4>
 
-        <p className="mt-2 text-sm text-zinc-400">
+        <p className="mt-2 text-sm text-zinc-500">
           Pix • Dinheiro • Cartão na entrega
         </p>
       </div>
 
     </div>
 
-    <div className="mt-8 border-t border-zinc-800 pt-6 text-center text-sm text-zinc-500">
+    <div className="mt-8 border-t border-zinc-200 pt-6 text-center text-sm text-zinc-500">
       © 2026 Delivery Yeshua. Todos os direitos reservados.
     </div>
   </div>
