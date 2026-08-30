@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import Header from "@/Components/Header";
@@ -47,6 +47,8 @@ export default function Home() {
   const [complemento, setComplemento] = useState("");
   const [trocoPara, setTrocoPara] = useState("");
   const [carrinhoCarregado, setCarrinhoCarregado] = useState(false);
+  const [avisoCarrinho, setAvisoCarrinho] = useState("");
+  const avisoCarrinhoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const cancelar = onSnapshot(
@@ -106,6 +108,14 @@ export default function Home() {
       JSON.stringify(carrinho)
     );
   }, [carrinho, carrinhoCarregado]);
+
+  useEffect(() => {
+    return () => {
+      if (avisoCarrinhoTimer.current) {
+        clearTimeout(avisoCarrinhoTimer.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     function atualizarStatusLoja() {
@@ -188,6 +198,16 @@ export default function Home() {
 
       return [...carrinhoAtual, { nome, preco, quantidade: 1 }];
     });
+
+    setAvisoCarrinho(`${nome} foi adicionado ao carrinho.`);
+
+    if (avisoCarrinhoTimer.current) {
+      clearTimeout(avisoCarrinhoTimer.current);
+    }
+
+    avisoCarrinhoTimer.current = setTimeout(() => {
+      setAvisoCarrinho("");
+    }, 2500);
   }
 
   function diminuirQuantidade(nome: string) {
@@ -312,7 +332,7 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
   }
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-white">
+    <main className="min-h-screen bg-zinc-950 pb-24 text-white">
       <Header
         quantidadeCarrinho={quantidadeTotal}
         abrirCarrinho={() => setCarrinhoAberto(true)}
@@ -408,7 +428,7 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
           </div>
         )}
 
-        <div className="sticky top-0 z-30 -mx-4 mt-8 border-y border-zinc-800 bg-zinc-950/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+        <div className="sticky top-[72px] z-30 -mx-4 mt-8 border-y border-zinc-800 bg-zinc-950/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
           <div className="flex gap-3 overflow-x-auto pb-1">
             {categorias.map((categoria, index) => (
               <button
@@ -448,7 +468,7 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
             <div
               key={categoria}
               id={categoria}
-              className="mt-10 scroll-mt-24"
+              className="mt-10 scroll-mt-40"
             >
               <h2 className="border-l-4 border-amber-500 pl-3 text-3xl font-black text-white">
                 {categoria}
@@ -472,6 +492,52 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
           );
         })}
       </section>
+
+
+      {avisoCarrinho && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed left-1/2 top-24 z-[60] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-2xl border border-green-500/30 bg-zinc-900 px-4 py-3 shadow-2xl"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-bold text-green-400">✓ Adicionado!</p>
+              <p className="truncate text-sm text-zinc-300">{avisoCarrinho}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setCarrinhoAberto(true);
+                setAvisoCarrinho("");
+              }}
+              className="shrink-0 rounded-xl bg-amber-500 px-3 py-2 text-sm font-black text-black transition hover:bg-amber-400"
+            >
+              Ver carrinho
+            </button>
+          </div>
+        </div>
+      )}
+
+      {quantidadeTotal > 0 && !carrinhoAberto && !checkoutAberto && !pedidoConfirmado && (
+        <div className="fixed inset-x-0 bottom-0 z-50 border-t border-zinc-700 bg-zinc-900/95 p-3 shadow-2xl backdrop-blur md:hidden">
+          <button
+            type="button"
+            onClick={() => setCarrinhoAberto(true)}
+            className="mx-auto flex w-full max-w-lg items-center justify-between gap-4 rounded-2xl bg-amber-500 px-5 py-3.5 text-left text-black shadow-lg transition active:scale-[0.99]"
+          >
+            <div>
+              <p className="text-sm font-black">
+                🛒 {quantidadeTotal} {quantidadeTotal === 1 ? "item" : "itens"} no carrinho
+              </p>
+              <p className="text-xs font-bold opacity-80">
+                R$ {valorTotal.toFixed(2).replace(".", ",")}
+              </p>
+            </div>
+            <span className="font-black">Ver carrinho →</span>
+          </button>
+        </div>
+      )}
 
       {carrinhoAberto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -875,7 +941,9 @@ Total: R$ ${totalComEntrega.toFixed(2).replace(".", ",")}`;
   href="https://wa.me/5551994154447"
   target="_blank"
   rel="noopener noreferrer"
-  className="fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-green-600 text-2xl shadow-xl transition hover:scale-110 hover:bg-green-500"
+  className={`fixed right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-green-600 text-2xl shadow-xl transition hover:scale-110 hover:bg-green-500 ${
+    quantidadeTotal > 0 ? "bottom-24 md:bottom-5" : "bottom-5"
+  }`}
   aria-label="Falar com a Delivery Yeshua pelo WhatsApp"
   title="Fale conosco pelo WhatsApp"
 >
