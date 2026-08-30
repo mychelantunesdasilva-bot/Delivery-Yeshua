@@ -7,13 +7,32 @@ import Header from "@/Components/Header";
 import ProductCard from "@/Components/ProductCard";
 import ProductModal from "@/Components/ProductModal";
 
+type Adicional = {
+  nome: string;
+  preco: number;
+};
+
+type GrupoOpcao = {
+  titulo: string;
+  opcoes: Adicional[];
+};
+
+type EscolhaObrigatoria = {
+  titulo: string;
+  escolha: Adicional;
+};
+
 type ProdutoCarrinho = {
   id: string;
   produtoId: string;
   nome: string;
+  precoBase: number;
   preco: number;
   quantidade: number;
   observacao?: string;
+  adicionais?: Adicional[];
+  removidos?: string[];
+  escolhasObrigatorias?: EscolhaObrigatoria[];
 };
 
 type ProdutoCardapio = {
@@ -26,10 +45,15 @@ type ProdutoCardapio = {
   ativo: boolean;
   destaque?: boolean;
   ordem?: number;
+  adicionais?: Adicional[];
+  ingredientes?: string[];
+  opcoesObrigatorias?: GrupoOpcao[];
+  esgotado?: boolean;
 };
 
 const CARRINHO_KEY = "delivery-yeshua-carrinho";
 const TELEFONE_LOJA = "5551994154447";
+const CHAVE_PIX = process.env.NEXT_PUBLIC_CHAVE_PIX || "";
 
 const TAXAS: Record<string, number> = {
   Guajuviras: 5,
@@ -50,6 +74,7 @@ function gerarId() {
 export default function Home() {
   const [produtos, setProdutos] = useState<ProdutoCardapio[]>([]);
   const [produtoAberto, setProdutoAberto] = useState<ProdutoCardapio | null>(null);
+  const [itemEditando, setItemEditando] = useState<ProdutoCarrinho | null>(null);
   const [carrinho, setCarrinho] = useState<ProdutoCarrinho[]>([]);
   const [carrinhoAberto, setCarrinhoAberto] = useState(false);
   const [checkoutAberto, setCheckoutAberto] = useState(false);
@@ -57,7 +82,8 @@ export default function Home() {
 
   const [nome, setNome] = useState("");
   const [telefone, setTelefone] = useState("");
-  const [endereco, setEndereco] = useState("");
+  const [rua, setRua] = useState("");
+  const [numero, setNumero] = useState("");
   const [pagamento, setPagamento] = useState("Pix");
   const [numeroPedido, setNumeroPedido] = useState("");
   const [observacaoPedido, setObservacaoPedido] = useState("");
@@ -69,6 +95,7 @@ export default function Home() {
   const [erroProdutos, setErroProdutos] = useState("");
   const [tipoEntrega, setTipoEntrega] = useState<"entrega" | "retirada">("entrega");
   const [complemento, setComplemento] = useState("");
+  const [referencia, setReferencia] = useState("");
   const [trocoPara, setTrocoPara] = useState("");
   const [carrinhoCarregado, setCarrinhoCarregado] = useState(false);
   const [avisoCarrinho, setAvisoCarrinho] = useState("");
@@ -126,9 +153,34 @@ export default function Home() {
           produtoId:
             typeof item.produtoId === "string" ? item.produtoId : item.nome || gerarId(),
           nome: item.nome || "Produto",
+          precoBase:
+            typeof item.precoBase === "number" ? item.precoBase : item.preco || 0,
           preco: item.preco || 0,
           quantidade: Math.max(1, Math.floor(item.quantidade || 1)),
           observacao: typeof item.observacao === "string" ? item.observacao : "",
+          adicionais: Array.isArray(item.adicionais)
+            ? item.adicionais.filter(
+                (adicional): adicional is Adicional =>
+                  !!adicional &&
+                  typeof adicional.nome === "string" &&
+                  typeof adicional.preco === "number"
+              )
+            : [],
+          removidos: Array.isArray(item.removidos)
+            ? item.removidos.filter((ingrediente): ingrediente is string =>
+                typeof ingrediente === "string"
+              )
+            : [],
+          escolhasObrigatorias: Array.isArray(item.escolhasObrigatorias)
+            ? item.escolhasObrigatorias.filter(
+                (grupo): grupo is EscolhaObrigatoria =>
+                  !!grupo &&
+                  typeof grupo.titulo === "string" &&
+                  !!grupo.escolha &&
+                  typeof grupo.escolha.nome === "string" &&
+                  typeof grupo.escolha.preco === "number"
+              )
+            : [],
         }));
 
       setCarrinho(normalizado);
@@ -204,16 +256,84 @@ export default function Home() {
     avisoCarrinhoTimer.current = setTimeout(() => setAvisoCarrinho(""), 2500);
   }
 
-  function adicionarProduto(
+  function assinaturaPersonalizacao(
+    observacao: string,
+    adicionais: Adicional[],
+    removidos: string[],
+    escolhasObrigatorias: EscolhaObrigatoria[]
+  ) {
+    return JSON.stringify({
+      observacao: observacao.trim(),
+      adicionais: [...adicionais]
+        .map((adicional) => `${adicional.nome}:${adicional.preco}`)
+        .sort(),
+      removidos: [...removidos].sort(),
+      escolhasObrigatorias: [...escolhasObrigatorias]
+        .map((grupo) => `${grupo.titulo}:${grupo.escolha.nome}:${grupo.escolha.preco}`)
+        .sort(),
+    });
+  }
+
+  function salvarProdutoNoCarrinho(
     produto: ProdutoCardapio,
     quantidade: number,
-    observacao: string
+    observacao: string,
+    adicionais: Adicional[],
+    removidos: string[],
+    escolhasObrigatorias: EscolhaObrigatoria[]
   ) {
     const obs = observacao.trim();
+    const extras = adicionais.filter((adicional) => adicional.preco >= 0);
+    const semIngredientes = [...new Set(removidos)];
+    const precoUnitario =
+      produto.preco +
+      extras.reduce((total, adicional) => total + adicional.preco, 0) +
+      escolhasObrigatorias.reduce(
+        (total, grupo) => total + grupo.escolha.preco,
+        0
+      );
+
+    if (itemEditando) {
+      setCarrinho((atual) =>
+        atual.map((item) =>
+          item.id === itemEditando.id
+            ? {
+                ...item,
+                nome: produto.nome,
+                precoBase: produto.preco,
+                preco: precoUnitario,
+                quantidade,
+                observacao: obs,
+                adicionais: extras,
+                removidos: semIngredientes,
+                escolhasObrigatorias,
+              }
+            : item
+        )
+      );
+      setItemEditando(null);
+      setProdutoAberto(null);
+      setCarrinhoAberto(true);
+      return;
+    }
+
+    const assinatura = assinaturaPersonalizacao(
+      obs,
+      extras,
+      semIngredientes,
+      escolhasObrigatorias
+    );
 
     setCarrinho((atual) => {
       const existente = atual.find(
-        (item) => item.produtoId === produto.id && (item.observacao || "") === obs
+        (item) =>
+          item.produtoId === produto.id &&
+          assinaturaPersonalizacao(
+            item.observacao || "",
+            item.adicionais || [],
+            item.removidos || [],
+            item.escolhasObrigatorias || []
+          ) === assinatura
       );
 
       if (existente) {
@@ -230,15 +350,31 @@ export default function Home() {
           id: gerarId(),
           produtoId: produto.id,
           nome: produto.nome,
-          preco: produto.preco,
+          precoBase: produto.preco,
+          preco: precoUnitario,
           quantidade,
           observacao: obs,
+          adicionais: extras,
+          removidos: semIngredientes,
         },
       ];
     });
 
     setProdutoAberto(null);
     mostrarAviso(produto.nome);
+  }
+
+  function editarProduto(item: ProdutoCarrinho) {
+    const produto = produtos.find((produtoAtual) => produtoAtual.id === item.produtoId);
+
+    if (!produto) {
+      alert("Esse produto não está mais disponível no cardápio para edição.");
+      return;
+    }
+
+    setCarrinhoAberto(false);
+    setItemEditando(item);
+    setProdutoAberto(produto);
   }
 
   function alterarQuantidade(itemId: string, delta: number) {
@@ -254,7 +390,13 @@ export default function Home() {
   }
 
   function removerProduto(itemId: string) {
-    setCarrinho((atual) => atual.filter((item) => item.id !== itemId));
+    const item = carrinho.find((produto) => produto.id === itemId);
+    if (!item) return;
+
+    const confirmar = window.confirm(`Remover "${item.nome}" da sacola?`);
+    if (!confirmar) return;
+
+    setCarrinho((atual) => atual.filter((produto) => produto.id !== itemId));
   }
 
   const quantidadeTotal = carrinho.reduce(
@@ -283,8 +425,11 @@ export default function Home() {
       return;
     }
 
-    if (tipoEntrega === "entrega" && (!endereco.trim() || !bairro)) {
-      alert("Preencha endereço e bairro para entrega.");
+    if (
+      tipoEntrega === "entrega" &&
+      (!rua.trim() || !numero.trim() || !bairro)
+    ) {
+      alert("Preencha rua, número e bairro para entrega.");
       return;
     }
 
@@ -312,8 +457,23 @@ export default function Home() {
     const itens = carrinho
       .map((produto) => {
         const subtotal = produto.preco * produto.quantidade;
+        const adicionais = (produto.adicionais || []).length
+          ? `\n   + ${(produto.adicionais || [])
+              .map((adicional) =>
+                `${adicional.nome} (R$ ${moeda(adicional.preco)})`
+              )
+              .join("\n   + ")}`
+          : "";
+        const removidos = (produto.removidos || []).length
+          ? `\n   - Sem ${(produto.removidos || []).join(", sem ")}`
+          : "";
+        const obrigatorias = (produto.escolhasObrigatorias || []).length
+          ? `\n   • ${(produto.escolhasObrigatorias || [])
+              .map((grupo) => `${grupo.titulo}: ${grupo.escolha.nome}`)
+              .join("\n   • ")}`
+          : "";
         const obs = produto.observacao ? `\n   Obs.: ${produto.observacao}` : "";
-        return `${produto.quantidade}x ${produto.nome} — R$ ${moeda(subtotal)}${obs}`;
+        return `${produto.quantidade}x ${produto.nome} — R$ ${moeda(subtotal)}${obrigatorias}${adicionais}${removidos}${obs}`;
       })
       .join("\n\n");
 
@@ -325,9 +485,9 @@ Pedido #${numeroPedido}
 🚚 Tipo: ${tipoEntrega === "entrega" ? "Entrega" : "Retirada no local"}
 ${
       tipoEntrega === "entrega"
-        ? `📍 Endereço: ${endereco.trim()}\n🏠 Complemento: ${
+        ? `📍 Rua: ${rua.trim()}\n🔢 Número: ${numero.trim()}\n🏠 Complemento: ${
             complemento.trim() || "Nenhum"
-          }\n🗺️ Bairro: ${bairro}`
+          }\n📌 Referência: ${referencia.trim() || "Nenhuma"}\n🗺️ Bairro: ${bairro}`
         : "📍 Retirada no local"
     }
 ⏱️ Estimativa: ${tempoEntrega}
@@ -353,8 +513,10 @@ Taxa de entrega: R$ ${moeda(taxaAplicada)}
     setPedidoConfirmado(false);
     setNome("");
     setTelefone("");
-    setEndereco("");
+    setRua("");
+    setNumero("");
     setComplemento("");
+    setReferencia("");
     setBairro("");
     setTaxaEntrega(0);
     setObservacaoPedido("");
@@ -466,7 +628,10 @@ Taxa de entrega: R$ ${moeda(taxaAplicada)}
                     descricao={produto.descricao}
                     preco={moeda(produto.preco)}
                     imagem={produto.imagem}
-                    abrirDetalhes={() => setProdutoAberto(produto)}
+                    esgotado={produto.esgotado ?? false}
+                    abrirDetalhes={() => {
+                      if (!produto.esgotado) setProdutoAberto(produto);
+                    }}
                   />
                 ))}
               </div>
@@ -516,7 +681,10 @@ Taxa de entrega: R$ ${moeda(taxaAplicada)}
                     descricao={produto.descricao}
                     preco={moeda(produto.preco)}
                     imagem={produto.imagem}
-                    abrirDetalhes={() => setProdutoAberto(produto)}
+                    esgotado={produto.esgotado ?? false}
+                    abrirDetalhes={() => {
+                      if (!produto.esgotado) setProdutoAberto(produto);
+                    }}
                   />
                 ))}
               </div>
@@ -528,8 +696,22 @@ Taxa de entrega: R$ ${moeda(taxaAplicada)}
       {produtoAberto && (
         <ProductModal
           produto={produtoAberto}
-          fechar={() => setProdutoAberto(null)}
-          adicionar={adicionarProduto}
+          fechar={() => {
+            setProdutoAberto(null);
+            setItemEditando(null);
+          }}
+          salvar={salvarProdutoNoCarrinho}
+          itemInicial={
+            itemEditando
+              ? {
+                  quantidade: itemEditando.quantidade,
+                  observacao: itemEditando.observacao || "",
+                  adicionais: itemEditando.adicionais || [],
+                  removidos: itemEditando.removidos || [],
+                  escolhasObrigatorias: itemEditando.escolhasObrigatorias || [],
+                }
+              : undefined
+          }
         />
       )}
 
@@ -619,11 +801,41 @@ Taxa de entrega: R$ ${moeda(taxaAplicada)}
                             <p className="mt-1 text-sm text-zinc-500">
                               R$ {moeda(produto.preco)} cada
                             </p>
+                            {(produto.escolhasObrigatorias || []).length > 0 && (
+                              <div className="mt-2 text-sm text-zinc-600">
+                                {(produto.escolhasObrigatorias || []).map((grupo) => (
+                                  <p key={`${produto.id}-${grupo.titulo}`}>
+                                    {grupo.titulo}: {grupo.escolha.nome}
+                                  </p>
+                                ))}
+                              </div>
+                            )}
+                            {(produto.adicionais || []).length > 0 && (
+                              <div className="mt-2 text-sm text-zinc-600">
+                                {(produto.adicionais || []).map((adicional) => (
+                                  <p key={`${produto.id}-${adicional.nome}`}>
+                                    + {adicional.nome} · R$ {moeda(adicional.preco)}
+                                  </p>
+                                ))}
+                              </div>
+                            )}
+                            {(produto.removidos || []).length > 0 && (
+                              <p className="mt-2 text-sm text-zinc-500">
+                                Sem: {(produto.removidos || []).join(", ")}
+                              </p>
+                            )}
                             {produto.observacao && (
                               <p className="mt-2 rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-600">
                                 Obs.: {produto.observacao}
                               </p>
                             )}
+                            <button
+                              type="button"
+                              onClick={() => editarProduto(produto)}
+                              className="mt-3 text-sm font-black text-red-600"
+                            >
+                              Editar item
+                            </button>
                           </div>
 
                           <button
@@ -758,9 +970,17 @@ Taxa de entrega: R$ ${moeda(taxaAplicada)}
                   <div className="mt-3 space-y-3">
                     <input
                       type="text"
-                      placeholder="Rua e número"
-                      value={endereco}
-                      onChange={(event) => setEndereco(event.target.value)}
+                      placeholder="Rua / avenida"
+                      value={rua}
+                      onChange={(event) => setRua(event.target.value)}
+                      className="w-full rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-red-500"
+                    />
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="Número"
+                      value={numero}
+                      onChange={(event) => setNumero(event.target.value)}
                       className="w-full rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-red-500"
                     />
                     <select
@@ -777,9 +997,16 @@ Taxa de entrega: R$ ${moeda(taxaAplicada)}
                     </select>
                     <input
                       type="text"
-                      placeholder="Complemento ou referência (opcional)"
+                      placeholder="Complemento (opcional)"
                       value={complemento}
                       onChange={(event) => setComplemento(event.target.value)}
+                      className="w-full rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-red-500"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Ponto de referência (opcional)"
+                      value={referencia}
+                      onChange={(event) => setReferencia(event.target.value)}
                       className="w-full rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-red-500"
                     />
                   </div>
@@ -797,6 +1024,24 @@ Taxa de entrega: R$ ${moeda(taxaAplicada)}
                   <option value="Dinheiro">Dinheiro</option>
                   <option value="Cartão na entrega">Cartão na entrega</option>
                 </select>
+
+                {pagamento === "Pix" && (
+                  <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+                    <p className="font-black">Pagamento via Pix</p>
+                    {CHAVE_PIX ? (
+                      <>
+                        <p className="mt-1 break-all">Chave: <strong>{CHAVE_PIX}</strong></p>
+                        <p className="mt-1 text-xs text-emerald-700">
+                          Envie o comprovante junto com o pedido no WhatsApp.
+                        </p>
+                      </>
+                    ) : (
+                      <p className="mt-1 text-xs text-emerald-700">
+                        A chave Pix ainda não foi configurada no site.
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {pagamento === "Dinheiro" && (
                   <input
@@ -829,10 +1074,27 @@ Taxa de entrega: R$ ${moeda(taxaAplicada)}
                 <div className="mt-3 space-y-2 text-sm">
                   {carrinho.map((produto) => (
                     <div key={produto.id} className="flex justify-between gap-4">
-                      <span className="text-zinc-700">
+                      <span className="min-w-0 text-zinc-700">
                         {produto.quantidade}x {produto.nome}
+                        {(produto.escolhasObrigatorias || []).length > 0 && (
+                          <span className="mt-0.5 block text-xs text-zinc-500">
+                            {(produto.escolhasObrigatorias || [])
+                              .map((grupo) => `${grupo.titulo}: ${grupo.escolha.nome}`)
+                              .join(" • ")}
+                          </span>
+                        )}
+                        {(produto.adicionais || []).length > 0 && (
+                          <span className="mt-0.5 block text-xs text-zinc-500">
+                            + {(produto.adicionais || []).map((item) => item.nome).join(", ")}
+                          </span>
+                        )}
+                        {(produto.removidos || []).length > 0 && (
+                          <span className="mt-0.5 block text-xs text-zinc-500">
+                            Sem: {(produto.removidos || []).join(", ")}
+                          </span>
+                        )}
                       </span>
-                      <span className="font-semibold">
+                      <span className="shrink-0 font-semibold">
                         R$ {moeda(produto.preco * produto.quantidade)}
                       </span>
                     </div>
@@ -898,7 +1160,7 @@ Taxa de entrega: R$ ${moeda(taxaAplicada)}
               <p><strong>{nome}</strong> • {telefone}</p>
               <p className="mt-2">
                 {tipoEntrega === "entrega"
-                  ? `${endereco}${complemento.trim() ? `, ${complemento}` : ""} — ${bairro}`
+                  ? `${rua}, ${numero}${complemento.trim() ? `, ${complemento}` : ""} — ${bairro}${referencia.trim() ? ` • Ref.: ${referencia}` : ""}`
                   : "Retirada no local"}
               </p>
               <p className="mt-2">Pagamento: <strong>{pagamento}</strong></p>
@@ -918,6 +1180,23 @@ Taxa de entrega: R$ ${moeda(taxaAplicada)}
                       R$ {moeda(produto.preco * produto.quantidade)}
                     </span>
                   </div>
+                  {(produto.escolhasObrigatorias || []).length > 0 && (
+                    <p className="mt-1 text-sm text-zinc-500">
+                      {(produto.escolhasObrigatorias || [])
+                        .map((grupo) => `${grupo.titulo}: ${grupo.escolha.nome}`)
+                        .join(" • ")}
+                    </p>
+                  )}
+                  {(produto.adicionais || []).length > 0 && (
+                    <p className="mt-1 text-sm text-zinc-500">
+                      + {(produto.adicionais || []).map((item) => item.nome).join(", ")}
+                    </p>
+                  )}
+                  {(produto.removidos || []).length > 0 && (
+                    <p className="mt-1 text-sm text-zinc-500">
+                      Sem: {(produto.removidos || []).join(", ")}
+                    </p>
+                  )}
                   {produto.observacao && (
                     <p className="mt-1 text-sm text-zinc-500">Obs.: {produto.observacao}</p>
                   )}

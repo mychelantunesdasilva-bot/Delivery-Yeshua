@@ -12,6 +12,16 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 
+type Adicional = {
+  nome: string;
+  preco: number;
+};
+
+type GrupoOpcao = {
+  titulo: string;
+  opcoes: Adicional[];
+};
+
 type Produto = {
   id: string;
   nome: string;
@@ -22,6 +32,10 @@ type Produto = {
   ativo: boolean;
   destaque?: boolean;
   ordem?: number;
+  adicionais?: Adicional[];
+  ingredientes?: string[];
+  opcoesObrigatorias?: GrupoOpcao[];
+  esgotado?: boolean;
 };
 
 type FormProduto = {
@@ -31,7 +45,11 @@ type FormProduto = {
   categoria: string;
   imagem: string;
   destaque: boolean;
+  esgotado: boolean;
   ordem: string;
+  ingredientes: string;
+  adicionais: string;
+  opcoesObrigatorias: string;
 };
 
 const categorias = [
@@ -49,7 +67,11 @@ const formularioVazio: FormProduto = {
   categoria: "Lanches",
   imagem: "/produtos/DELIVERY.png",
   destaque: false,
+  esgotado: false,
   ordem: "",
+  ingredientes: "",
+  adicionais: "",
+  opcoesObrigatorias: "",
 };
 
 export default function PainelPage() {
@@ -109,6 +131,7 @@ export default function PainelPage() {
   const produtosAtivos = produtos.filter((produto) => produto.ativo).length;
   const produtosInativos = produtos.length - produtosAtivos;
   const produtosDestaque = produtos.filter((produto) => produto.destaque).length;
+  const produtosEsgotados = produtos.filter((produto) => produto.esgotado).length;
 
   const produtosFiltrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
@@ -125,6 +148,7 @@ export default function PainelPage() {
         (filtro === "Ativos" && produto.ativo) ||
         (filtro === "Inativos" && !produto.ativo) ||
         (filtro === "Destaques" && produto.destaque) ||
+        (filtro === "Esgotados" && produto.esgotado) ||
         produto.categoria === filtro;
 
       return combinaBusca && combinaFiltro;
@@ -152,10 +176,85 @@ export default function PainelPage() {
       categoria: produto.categoria,
       imagem: produto.imagem || "/produtos/DELIVERY.png",
       destaque: produto.destaque ?? false,
+      esgotado: produto.esgotado ?? false,
       ordem: produto.ordem?.toString() ?? "",
+      ingredientes: (produto.ingredientes || []).join("\n"),
+      adicionais: (produto.adicionais || [])
+        .map((adicional) => `${adicional.nome}|${adicional.preco.toFixed(2).replace(".", ",")}`)
+        .join("\n"),
+      opcoesObrigatorias: (produto.opcoesObrigatorias || [])
+        .flatMap((grupo) =>
+          grupo.opcoes.map(
+            (opcao) =>
+              `${grupo.titulo}|${opcao.nome}|${opcao.preco.toFixed(2).replace(".", ",")}`
+          )
+        )
+        .join("\n"),
     });
 
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+
+  function lerIngredientes(texto: string) {
+    return [...new Set(
+      texto
+        .split("\n")
+        .map((linha) => linha.trim())
+        .filter(Boolean)
+    )];
+  }
+
+  function lerAdicionais(texto: string): Adicional[] {
+    const linhas = texto
+      .split("\n")
+      .map((linha) => linha.trim())
+      .filter(Boolean);
+
+    return linhas.map((linha, indice) => {
+      const [nomeBruto, precoBruto] = linha.split("|");
+      const nome = (nomeBruto || "").trim();
+      const preco = Number((precoBruto || "").trim().replace(",", "."));
+
+      if (!nome || Number.isNaN(preco) || preco < 0) {
+        throw new Error(
+          `Adicional inválido na linha ${indice + 1}. Use o formato Nome|Preço, por exemplo: Bacon|5,00`
+        );
+      }
+
+      return { nome, preco };
+    });
+  }
+
+
+  function lerOpcoesObrigatorias(texto: string): GrupoOpcao[] {
+    const grupos = new Map<string, Adicional[]>();
+    const linhas = texto
+      .split("\n")
+      .map((linha) => linha.trim())
+      .filter(Boolean);
+
+    linhas.forEach((linha, indice) => {
+      const [tituloBruto, nomeBruto, precoBruto] = linha.split("|");
+      const titulo = (tituloBruto || "").trim();
+      const nome = (nomeBruto || "").trim();
+      const preco = Number((precoBruto || "").trim().replace(",", "."));
+
+      if (!titulo || !nome || Number.isNaN(preco) || preco < 0) {
+        throw new Error(
+          `Opção obrigatória inválida na linha ${indice + 1}. Use Grupo|Opção|Preço. Ex: Tamanho|Grande|5,00`
+        );
+      }
+
+      const atuais = grupos.get(titulo) || [];
+      atuais.push({ nome, preco });
+      grupos.set(titulo, atuais);
+    });
+
+    return Array.from(grupos.entries()).map(([titulo, opcoes]) => ({
+      titulo,
+      opcoes,
+    }));
   }
 
   async function salvarProduto(event: FormEvent<HTMLFormElement>) {
@@ -165,6 +264,19 @@ export default function PainelPage() {
     const ordem = formulario.ordem.trim()
       ? Number(formulario.ordem)
       : undefined;
+
+    let ingredientes: string[] = [];
+    let adicionais: Adicional[] = [];
+    let opcoesObrigatorias: GrupoOpcao[] = [];
+
+    try {
+      ingredientes = lerIngredientes(formulario.ingredientes);
+      adicionais = lerAdicionais(formulario.adicionais);
+      opcoesObrigatorias = lerOpcoesObrigatorias(formulario.opcoesObrigatorias);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Revise os adicionais.");
+      return;
+    }
 
     if (
       !formulario.nome.trim() ||
@@ -189,6 +301,10 @@ export default function PainelPage() {
       categoria: formulario.categoria,
       imagem: formulario.imagem.trim() || "/produtos/DELIVERY.png",
       destaque: formulario.destaque,
+      esgotado: formulario.esgotado,
+      ingredientes,
+      adicionais,
+      opcoesObrigatorias,
       ...(ordem !== undefined ? { ordem } : {}),
     };
 
@@ -232,6 +348,17 @@ export default function PainelPage() {
     } catch (error) {
       console.error(error);
       alert("Erro ao alterar o destaque do produto.");
+    }
+  }
+
+  async function alterarEsgotado(produto: Produto) {
+    try {
+      await updateDoc(doc(db, "produtos", produto.id), {
+        esgotado: !(produto.esgotado ?? false),
+      });
+    } catch (error) {
+      console.error(error);
+      alert("Erro ao alterar a disponibilidade do produto.");
     }
   }
 
@@ -304,11 +431,12 @@ export default function PainelPage() {
           </div>
         </header>
 
-        <section className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <section className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <CardResumo titulo="Produtos" valor={produtos.length} detalhe="Cadastrados" />
           <CardResumo titulo="Ativos" valor={produtosAtivos} detalhe="Visíveis no site" />
           <CardResumo titulo="Inativos" valor={produtosInativos} detalhe="Ocultos do site" />
           <CardResumo titulo="Destaques" valor={produtosDestaque} detalhe="Mais pedidos" />
+          <CardResumo titulo="Esgotados" valor={produtosEsgotados} detalhe="Visíveis, sem compra" />
         </section>
 
         <section className="mt-8 rounded-3xl border border-zinc-800 bg-zinc-900 p-5 shadow-xl sm:p-7">
@@ -409,6 +537,67 @@ export default function PainelPage() {
                 </span>
               </label>
 
+              <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3">
+                <input
+                  type="checkbox"
+                  checked={formulario.esgotado}
+                  onChange={(event) =>
+                    atualizarCampo("esgotado", event.target.checked)
+                  }
+                  className="h-5 w-5 accent-red-500"
+                />
+                <span>
+                  <span className="block font-bold">Marcar como esgotado</span>
+                  <span className="text-xs text-zinc-500">
+                    Continua aparecendo no cardápio, mas não pode ser pedido.
+                  </span>
+                </span>
+              </label>
+
+              <div className="md:col-span-2 grid gap-4 lg:grid-cols-2">
+                <Campo label="Ingredientes que o cliente pode remover">
+                  <textarea
+                    value={formulario.ingredientes}
+                    onChange={(event) =>
+                      atualizarCampo("ingredientes", event.target.value)
+                    }
+                    placeholder={"Um por linha. Ex:\nAlface\nTomate\nCebola"}
+                    className={`${classeCampo} min-h-36 resize-y`}
+                  />
+                  <p className="mt-1 text-xs text-zinc-500">
+                    Deixe vazio em bebidas ou produtos sem personalização.
+                  </p>
+                </Campo>
+
+                <Campo label="Adicionais e preços">
+                  <textarea
+                    value={formulario.adicionais}
+                    onChange={(event) =>
+                      atualizarCampo("adicionais", event.target.value)
+                    }
+                    placeholder={"Um por linha no formato Nome|Preço. Ex:\nBacon|5,00\nQueijo extra|3,00"}
+                    className={`${classeCampo} min-h-36 resize-y`}
+                  />
+                  <p className="mt-1 text-xs text-zinc-500">
+                    Use uma barra vertical | entre o nome e o preço.
+                  </p>
+                </Campo>
+
+                <Campo label="Opções obrigatórias">
+                  <textarea
+                    value={formulario.opcoesObrigatorias}
+                    onChange={(event) =>
+                      atualizarCampo("opcoesObrigatorias", event.target.value)
+                    }
+                    placeholder={"Uma opção por linha: Grupo|Opção|Preço. Ex:\nTamanho|Normal|0\nTamanho|Grande|5,00\nPonto|Bem passado|0"}
+                    className={`${classeCampo} min-h-36 resize-y`}
+                  />
+                  <p className="mt-1 text-xs text-zinc-500">
+                    O cliente terá que escolher 1 opção de cada grupo antes de adicionar.
+                  </p>
+                </Campo>
+              </div>
+
               <div className="md:col-span-2">
                 <Campo label="Descrição">
                   <textarea
@@ -468,6 +657,7 @@ export default function PainelPage() {
                 <option>Ativos</option>
                 <option>Inativos</option>
                 <option>Destaques</option>
+                <option>Esgotados</option>
                 {categorias.map((categoria) => (
                   <option key={categoria}>{categoria}</option>
                 ))}
@@ -512,6 +702,11 @@ export default function PainelPage() {
                             ⭐ Destaque
                           </span>
                         )}
+                        {produto.esgotado && (
+                          <span className="rounded-full bg-red-500/10 px-2.5 py-1 text-xs font-bold text-red-400">
+                            Esgotado
+                          </span>
+                        )}
                       </div>
 
                       <p className="mt-1 text-sm font-medium text-zinc-400">
@@ -520,6 +715,14 @@ export default function PainelPage() {
                           ? ` • Ordem ${produto.ordem}`
                           : ""}
                       </p>
+
+                      {((produto.adicionais || []).length > 0 ||
+                        (produto.ingredientes || []).length > 0) && (
+                        <p className="mt-2 text-xs text-zinc-500">
+                          {(produto.adicionais || []).length} adicional(is) • {" "}
+                          {(produto.ingredientes || []).length} ingrediente(s) removível(is)
+                        </p>
+                      )}
 
                       <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-500">
                         {produto.descricao}
